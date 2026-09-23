@@ -1,4 +1,5 @@
 import AppKit
+import WebKit
 import XCTest
 @testable import Markly
 
@@ -249,5 +250,45 @@ final class EditorTests: XCTestCase {
         XCTAssertGreaterThan(frame.width, 200, "clickable area covers the whole bar, not an empty 16 pt square")
         XCTAssertGreaterThan(frame.height, 30)
         XCTAssertTrue(container.bounds.contains(frame), "bar stays inside the editor: \(frame) in \(container.bounds)")
+    }
+
+    /// Loads a real preview page and runs the note-switch script, instant and animated.
+    func testPreviewSwapScriptReplacesContent() throws {
+        UserDefaults.standard.set(false, forKey: Pref.previewNetwork)  // no CDN in tests
+        defer { UserDefaults.standard.removeObject(forKey: Pref.previewNetwork) }
+        let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
+        let loaded = expectation(description: "loaded")
+        final class Nav: NSObject, WKNavigationDelegate {
+            let done: () -> Void
+            init(_ done: @escaping () -> Void) { self.done = done }
+            func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { done() }
+        }
+        let nav = Nav { loaded.fulfill() }
+        web.navigationDelegate = nav
+        web.loadHTMLString(MarkdownRenderer.page(title: "A", body: "<p>one</p>", baseURL: nil, accentHex: "#0a84ff"), baseURL: nil)
+        wait(for: [loaded], timeout: 10)
+
+        func eval(_ js: String) throws -> Any? {
+            var result: Any?, failure: Error?
+            let done = expectation(description: js)
+            web.evaluateJavaScript(js) { r, e in result = r; failure = e; done.fulfill() }
+            wait(for: [done], timeout: 5)
+            if let failure { throw failure }
+            return result
+        }
+
+        _ = try eval("__swap('<p>two</p>', '', 'B', false)")
+        XCTAssertEqual(try eval("document.getElementById('content').innerHTML") as? String, "<p>two</p>")
+        XCTAssertEqual(try eval("document.title") as? String, "B")
+
+        _ = try eval("__swap('<p>three</p>', 'file:///tmp/', 'C', true)")
+        XCTAssertEqual(try eval("document.querySelectorAll('article').length") as? Int, 2, "old and new pages overlap during the transition")
+        XCTAssertEqual(try eval("document.getElementById('content').innerHTML") as? String, "<p>three</p>")
+        let settled = expectation(description: "settled")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { settled.fulfill() }  // hidden pages throttle timers
+        wait(for: [settled], timeout: 2)
+        XCTAssertEqual(try eval("document.querySelectorAll('article').length") as? Int, 1, "old page removed afterwards")
+        XCTAssertEqual(try eval("document.querySelector('base').href") as? String, "file:///tmp/")
+        withExtendedLifetime(nav) {}
     }
 }

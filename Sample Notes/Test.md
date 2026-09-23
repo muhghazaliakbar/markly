@@ -1,13 +1,13 @@
-# Welcome to Markly
+na# **Welcome** to Markly
 
-Markly is a **native**, *open-source* Markdown editor. Syntax like `**` and `#` fades away when you're not editing that line — click into a line to see it.
+Markly is a **native**, *open-source* *Markdown* editor. Syntax like `**` and `#` fades away when you're ~~not~~ editing that line — click into a line to see it.
 
 ![Markly icon](images/markly.png)
 
 ## What works
 
 - [x] Live styling for **bold**, *italic*, ~~strikethrough~~ and ==highlights==
-- [ ] Click a checkbox to toggle it
+- [ ] Click a **checkbox** to toggle it
 - [ ] Press ⌘-click on [a link](https://github.com) to open it
 1. Numbered lists continue when you press Return
 2. Tab / ⇧Tab to indent

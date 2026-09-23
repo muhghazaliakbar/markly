@@ -54,6 +54,7 @@ enum MarkdownRenderer {
     }
     function __update(html) { document.getElementById("content").innerHTML = html; __enhance(); }
     window.addEventListener("load", __enhance);
+    \(swapScript)
     </script>
     """
 
@@ -69,8 +70,44 @@ enum MarkdownRenderer {
     /// Without network access: just the update hook, no math typesetting or code colouring.
     static let localScripts = """
     <script>
+    function __enhance() {}
     function __update(html) { document.getElementById("content").innerHTML = html; }
+    \(swapScript)
     </script>
+    """
+
+    /// Switches the page to another note without reloading, with the same motion as the editor: the old page
+    /// fades and lifts 10 pt while the new one settles up from 10 pt below, 260 ms, same curve.
+    static let swapScript = """
+    function __swap(html, base, title, animate) {
+      let b = document.querySelector("base");
+      if (base) { if (!b) { b = document.createElement("base"); document.head.prepend(b); } b.href = base; }
+      document.title = title;
+      const old = document.getElementById("content");
+      const next = old.cloneNode(false);
+      next.innerHTML = html;
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (!animate || reduce) {
+        old.replaceWith(next);
+        window.scrollTo(0, 0);
+        __enhance();
+        return;
+      }
+      // Freeze the old page exactly where it is, then lay the new one out underneath it.
+      const r = old.getBoundingClientRect();
+      old.removeAttribute("id");
+      old.style.cssText = "position:fixed;margin:0;pointer-events:none;top:" + r.top + "px;left:" + r.left +
+        "px;width:" + r.width + "px";
+      old.parentNode.insertBefore(next, old);
+      window.scrollTo(0, 0);
+      __enhance();  // math and code are typeset before anything moves
+      const timing = { duration: 260, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)", fill: "both" };
+      old.animate([{ opacity: 1, transform: "translateY(0)" }, { opacity: 0, transform: "translateY(-10px)" }], timing)
+        .onfinish = () => old.remove();
+      // WebKit pauses animations on hidden pages (e.g. a minimised window); never leave the old page behind.
+      setTimeout(() => old.remove(), timing.duration + 60);
+      next.animate([{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "translateY(0)" }], timing);
+    }
     """
 
     /// A standalone document, used for the live preview and for export.

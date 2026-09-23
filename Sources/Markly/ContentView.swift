@@ -289,7 +289,8 @@ struct LivePreview: View {
     var privacyKey: String = ""
 
     var body: some View {
-        PreviewView(markdown: live.text, fileURL: fileURL, accent: accent, reloadKey: privacyKey)
+        PreviewView(markdown: live.text, fileURL: fileURL, accent: accent, reloadKey: privacyKey,
+                    animateSwitch: Pref.bool(Pref.animateTransitions, default: true))
     }
 }
 

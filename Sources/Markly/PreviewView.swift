@@ -16,6 +16,7 @@ struct PreviewView: NSViewRepresentable {
     var fileURL: URL?
     var accent: NSColor
     var reloadKey: String = ""
+    var animateSwitch: Bool = true
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -28,20 +29,32 @@ struct PreviewView: NSViewRepresentable {
     }
 
     func updateNSView(_ web: WKWebView, context: Context) {
-        context.coordinator.schedule(web: web, markdown: markdown, fileURL: fileURL, accent: accent.hexString + reloadKey)
+        context.coordinator.schedule(web: web, markdown: markdown, fileURL: fileURL, accent: accent.hexString + reloadKey,
+                                     animate: animateSwitch)
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate {
         private var loadedKey: String?
+        private var loadedPath: String?
         private var ready = false
         private var pending: String?
         private var lastMarkdown: String?
         private var work: DispatchWorkItem?
 
-        func schedule(web: WKWebView, markdown: String, fileURL: URL?, accent: String) {
-            let key = (fileURL?.path ?? "") + accent
-            if key != loadedKey {
-                loadedKey = key
+        func schedule(web: WKWebView, markdown: String, fileURL: URL?, accent: String, animate: Bool) {
+            let path = fileURL?.path ?? ""
+            // Another note, page already loaded: swap the content in place with the editor's transition.
+            if accent == loadedKey, path != loadedPath, ready {
+                loadedPath = path
+                lastMarkdown = markdown
+                work?.cancel()
+                swap(to: MarkdownRenderer.html(from: markdown), fileURL: fileURL, animate: animate, in: web)
+                return
+            }
+            // First load, or a setting that changes the page itself (accent, privacy): load it fresh.
+            if accent != loadedKey || path != loadedPath {
+                loadedKey = accent
+                loadedPath = path
                 ready = false
                 lastMarkdown = markdown
                 let html = MarkdownRenderer.page(title: fileURL?.lastPathComponent ?? "Preview",
@@ -64,6 +77,15 @@ struct PreviewView: NSViewRepresentable {
             }
             work = item
             DispatchQueue.main.async(execute: item)
+        }
+
+        private func swap(to body: String, fileURL: URL?, animate: Bool, in web: WKWebView) {
+            func json(_ s: String) -> String {
+                (try? JSONEncoder().encode(s)).flatMap { String(data: $0, encoding: .utf8) } ?? "\"\""
+            }
+            let base = fileURL?.deletingLastPathComponent().absoluteString ?? ""
+            let title = fileURL?.lastPathComponent ?? "Preview"
+            web.evaluateJavaScript("__swap(\(json(body)), \(json(base)), \(json(title)), \(animate))")
         }
 
         private func push(_ body: String, to web: WKWebView) {
