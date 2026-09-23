@@ -41,6 +41,13 @@ Built with SwiftUI and AppKit (TextKit) and Apple's native **Liquid Glass** desi
 | Open note 1–9 | ⌘1–⌘9 | Editor settings | ⌥⌘I |
 | App settings | ⌘, | Filter notes | ⇧⌘L |
 
+## Getting the code
+
+```bash
+git clone git@github.com:muhghazaliakbar/markly.git
+cd markly
+```
+
 ## Building
 
 Requires macOS 26 (Tahoe) or later and Xcode 26+, because the interface uses the Liquid Glass APIs (`glassEffect`, `GlassEffectContainer`, glass button styles).
@@ -84,3 +91,8 @@ Contributions welcome!
 ## License
 
 MIT
+
+## Contributing
+
+Issues and pull requests are welcome. [AGENTS.md](AGENTS.md) describes the architecture, the design and performance rules, and lessons learned. It's written for human contributors and AI coding agents alike (Claude Code picks it up through [CLAUDE.md](CLAUDE.md) and the project skills in `.claude/skills/`).
+

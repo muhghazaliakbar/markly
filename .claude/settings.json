@@ -1,0 +1,18 @@
+{
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "includeCoAuthoredBy": false,
+  "permissions": {
+    "allow": [
+      "Bash(swift build *)",
+      "Bash(swift test *)",
+      "Bash(scripts/build-app.sh *)",
+      "Bash(swift scripts/make-icon.swift *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)"
+    ]
+  }
+}
