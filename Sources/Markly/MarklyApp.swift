@@ -115,7 +115,7 @@ struct MarklyCommands: Commands {
         }
 
         CommandGroup(after: .sidebar) {
-            Toggle("Show Preview", isOn: $workspace.showPreview.animation(GlassStyle.fade))
+            Toggle("Show Preview", isOn: $workspace.showPreview)
                 .keyboardShortcut("p", modifiers: [.command, .option])
             Toggle("Focus Mode", isOn: $workspace.focusMode.animation(GlassStyle.spring))
                 .keyboardShortcut("f", modifiers: [.command, .shift])

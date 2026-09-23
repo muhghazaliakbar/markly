@@ -23,6 +23,8 @@ struct ContentView: View {
     @AppStorage(Pref.remoteImages) private var remoteImages = true
 
     @State private var columns = NavigationSplitViewVisibility.all
+    /// Editor's share of the width while the preview is open. Every time the preview opens it starts at 50/50.
+    @State private var previewSplit: CGFloat = 0.5
     /// The panel's frame in window (global) coordinates, so clicks outside it can close it.
     @State private var panelFrame: CGRect = .zero
     /// The panel stays mounted while it animates out, so closing plays the opening animation in reverse
@@ -71,6 +73,9 @@ struct ContentView: View {
                 }
             }
         }
+        .onChange(of: workspace.showPreview) { _, open in
+            if open { previewSplit = 0.5 }
+        }
         .onChange(of: workspace.focusMode) { _, on in
             withAnimation(GlassStyle.spring) { columns = on ? .detailOnly : .all }
         }
@@ -97,7 +102,7 @@ struct ContentView: View {
             ZStack(alignment: .bottom) {
                 Group {
                     if let url = workspace.currentURL {
-                        HSplitView {
+                        EditorPreviewSplit(showsPreview: workspace.showPreview, fraction: $previewSplit) {
                             EditorView(text: Binding(get: { workspace.text }, set: { workspace.text = $0 }),
                                        style: style, baseURL: url.deletingLastPathComponent(),
                                        revision: workspace.revision,
@@ -105,12 +110,11 @@ struct ContentView: View {
                                        overlayTrailingInset: showPanel ? 312 : 0,
                                        scrollSync: workspace.scrollSync,
                                        onOpenLink: { workspace.followLink($0) })
-                                .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
-                            if workspace.showPreview {
-                                LivePreview(live: workspace.live, fileURL: url, accent: accent.nsColor, scrollSync: workspace.scrollSync,
-                                            privacyKey: "\(previewNetwork)\(remoteImages)\(accentCustom)")
-                                    .frame(minWidth: 280, maxWidth: .infinity, maxHeight: .infinity)
-                            }
+                                .frame(maxHeight: .infinity)
+                        } preview: {
+                            LivePreview(live: workspace.live, fileURL: url, accent: accent.nsColor, scrollSync: workspace.scrollSync,
+                                        privacyKey: "\(previewNetwork)\(remoteImages)\(accentCustom)")
+                                .frame(maxHeight: .infinity)
                         }
                         .transition(.opacity)
                     } else {
@@ -183,7 +187,7 @@ struct ContentView: View {
         ToolbarItemGroup(placement: .primaryAction) {
             Button { workspace.newFile() } label: { Label("New File", systemImage: "square.and.pencil") }
                 .help("New File (⌘N)")
-            Toggle(isOn: $workspace.showPreview.animation(GlassStyle.fade)) { Label("Preview", systemImage: "doc.richtext") }
+            Toggle(isOn: $workspace.showPreview) { Label("Preview", systemImage: "doc.richtext") }
                 .help("Toggle Preview (⌥⌘P)")
                 .disabled(workspace.currentURL == nil)
             Button { withAnimation(GlassStyle.spring) { workspace.focusMode.toggle() } } label: { Label("Focus", systemImage: "arrow.up.left.and.arrow.down.right") }

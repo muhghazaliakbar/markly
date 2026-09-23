@@ -1,5 +1,6 @@
 import AppKit
 import WebKit
+import SwiftUI
 import XCTest
 @testable import Markly
 
@@ -418,5 +419,13 @@ final class EditorTests: XCTestCase {
         for (value, expected) in zip(reported, [21.25, 21.5, 21.75]) {
             XCTAssertEqual(value, expected, accuracy: 0.05, "position inside the paragraph on line 21")
         }
+    }
+
+    func testPreviewSplitOpensHalfAndRespectsMinimums() {
+        typealias Split = EditorPreviewSplit<EmptyView, EmptyView>
+        XCTAssertEqual(Split.editorWidth(total: 1200, fraction: 0.5), 600)
+        XCTAssertEqual(Split.editorWidth(total: 1000, fraction: 0.1), 320, "editor never below its minimum")
+        XCTAssertEqual(Split.editorWidth(total: 1000, fraction: 0.95), 719, "preview keeps 280 pt (+1 pt divider)")
+        XCTAssertEqual(Split.editorWidth(total: 500, fraction: 0.5), 320, "narrow window: editor keeps priority")
     }
 }
