@@ -282,9 +282,12 @@ final class EditorTests: XCTestCase {
         XCTAssertEqual(try eval("document.getElementById('content').innerHTML") as? String, "<p>two</p>")
         XCTAssertEqual(try eval("document.title") as? String, "B")
 
+        // With Reduce Motion on (as on CI runners) the swap is instant, so there is no overlap to see.
+        let reduceMotion = try eval("window.matchMedia('(prefers-reduced-motion: reduce)').matches") as? Bool ?? false
+        print("prefers-reduced-motion:", reduceMotion)
         // Count in the same evaluation: on a slow machine a second round trip can outlast the 260 ms transition.
         XCTAssertEqual(try eval("__swap('<p>three</p>', 'file:///tmp/', 'C', true); document.querySelectorAll('article').length") as? Int,
-                       2, "old and new pages overlap during the transition")
+                       reduceMotion ? 1 : 2, "old and new pages overlap during the transition unless motion is reduced")
         XCTAssertEqual(try eval("document.getElementById('content').innerHTML") as? String, "<p>three</p>")
         let settled = expectation(description: "settled")
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { settled.fulfill() }  // hidden pages throttle timers
