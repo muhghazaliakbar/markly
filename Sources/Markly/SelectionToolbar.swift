@@ -109,13 +109,62 @@ final class SelectionToolbarModel: ObservableObject {
     }
 }
 
-/// The bar itself: one Liquid Glass capsule of standard toggle buttons. Appearing and disappearing use the
-/// system's glass materialize transition; switching to the link field is a native glass morph.
+/// Layout of the bar on a 4 pt grid. Corners are concentric: the capsule's radius (height / 2) minus its
+/// inset equals the radius of the circular buttons inside it.
+private enum BarMetrics {
+    static let button: CGFloat = 28                 // hit target and hover/active circle
+    static let inset: CGFloat = 4                   // capsule padding on every side
+    static let spacing: CGFloat = 2                 // between buttons
+    static let groupGap: CGFloat = 6                // either side of the divider
+    static let icon = Font.system(size: 14, weight: .medium)
+    static let height = button + inset * 2          // 36
+
+    /// Width of the button row, so the link field can match it exactly and the glass morph keeps its size.
+    static var width: CGFloat {
+        let inline = CGFloat(FormatAction.inline.count), block = CGFloat(FormatAction.block.count)
+        // 10 children (buttons + divider) → 9 gaps; the divider is 1 pt wide with a gap either side.
+        return inset * 2 + (inline + block) * button + (inline + block) * spacing + groupGap * 2 + 1
+    }
+}
+
+/// Circular button with the system's feel: a faint fill on hover, stronger on press, and an accent tint when
+/// the format is active. Shapes are concentric with the capsule.
+private struct FormatButtonStyle: ButtonStyle {
+    var isOn: Bool
+    var isHovered: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(BarMetrics.icon)
+            .imageScale(.medium)
+            .symbolRenderingMode(.monochrome)  // every glyph at the same weight (hierarchical dims parts of some)
+            .foregroundStyle(isOn ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
+            .frame(width: BarMetrics.button, height: BarMetrics.button)
+            .background {
+                Circle().fill(fill(pressed: configuration.isPressed))
+            }
+            .contentShape(Circle())
+            .scaleEffect(configuration.isPressed ? 0.92 : 1)
+            .animation(.snappy(duration: 0.14), value: configuration.isPressed)
+            .animation(.snappy(duration: 0.14), value: isHovered)
+            .animation(.snappy(duration: 0.18), value: isOn)
+    }
+
+    private func fill(pressed: Bool) -> AnyShapeStyle {
+        if isOn { return AnyShapeStyle(.tint.opacity(pressed ? 0.3 : 0.2)) }
+        if pressed { return AnyShapeStyle(.primary.opacity(0.14)) }
+        if isHovered { return AnyShapeStyle(.primary.opacity(0.08)) }
+        return AnyShapeStyle(.clear)
+    }
+}
+
+/// The bar itself: one Liquid Glass capsule. Appearing and disappearing use the system's glass materialize
+/// transition; switching to the link field is a native glass morph between two capsules of the same size.
 struct SelectionToolbarView: View {
     @ObservedObject var model: SelectionToolbarModel
     @Namespace private var glass
     @FocusState private var linkFocused: Bool
-    @State private var hovered: FormatAction?
+    @State private var hovered: String?
 
     var body: some View {
         GlassEffectContainer {
@@ -123,7 +172,7 @@ struct SelectionToolbarView: View {
                 Group {
                     if model.editingLink { linkField } else { buttons }
                 }
-                // Plain (non-interactive) glass: each button gives its own hover and press feedback.
+                .frame(width: BarMetrics.width, height: BarMetrics.height)
                 .glassEffect(.regular, in: Capsule())
                 .glassEffectID(model.editingLink ? "link" : "buttons", in: glass)
                 .glassEffectTransition(.materialize)
@@ -134,64 +183,61 @@ struct SelectionToolbarView: View {
     }
 
     private var buttons: some View {
-        HStack(spacing: 2) {
-            ForEach(FormatAction.inline) { toggle($0) }
-            Divider().frame(height: 18).padding(.horizontal, 4)
-            ForEach(FormatAction.block) { toggle($0) }
+        HStack(spacing: BarMetrics.spacing) {
+            ForEach(FormatAction.inline) { button($0) }
+            Divider()
+                .frame(height: 16)
+                .padding(.horizontal, BarMetrics.groupGap)
+            ForEach(FormatAction.block) { button($0) }
         }
-        .toggleStyle(.button)
-        .buttonStyle(.borderless)
-        .controlSize(.large)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
+        .padding(BarMetrics.inset)
     }
 
-    private func toggle(_ action: FormatAction) -> some View {
-        Toggle(isOn: Binding(get: { model.active.contains(action) }, set: { _ in model.perform(action) })) {
-            Label(action.title, systemImage: action.symbol)
-                .labelStyle(.iconOnly)
-                .frame(width: 22, height: 22)
+    private func button(_ action: FormatAction) -> some View {
+        let isOn = model.active.contains(action)
+        return Button { model.perform(action) } label: {
+            Image(systemName: action.symbol)
         }
-        .background {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(.primary.opacity(hovered == action ? 0.1 : 0))
-                .padding(-3)
-        }
+        .buttonStyle(FormatButtonStyle(isOn: isOn, isHovered: hovered == action.rawValue))
         .onHover { inside in
-            withAnimation(.snappy(duration: 0.12)) {
-                if inside { hovered = action } else if hovered == action { hovered = nil }
-            }
+            if inside { hovered = action.rawValue } else if hovered == action.rawValue { hovered = nil }
         }
         .pointerStyle(.link)
-        .help("\(action.title) (\(action.shortcut))")
+        .help("\(action.title)  \(action.shortcut)")
         .accessibilityLabel(action.title)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
     private var linkField: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "link").foregroundStyle(.secondary)
+        let url = model.linkURL.trimmingCharacters(in: .whitespaces)
+        return HStack(spacing: BarMetrics.spacing) {
+            Image(systemName: "link")
+                .font(BarMetrics.icon)
+                .foregroundStyle(.secondary)
+                .frame(width: BarMetrics.button, height: BarMetrics.button)
             TextField("Paste or type a link", text: $model.linkURL)
                 .textFieldStyle(.plain)
-                .frame(width: 240)
+                .font(.system(size: 13))
                 .focused($linkFocused)
                 .onSubmit { model.commitLink() }
                 .onExitCommand { model.endLink() }
-            Button { model.commitLink() } label: {
-                Label("Apply Link", systemImage: "return").labelStyle(.iconOnly)
-            }
-            .buttonStyle(.borderless)
-            .pointerStyle(.link)
-            .disabled(model.linkURL.trimmingCharacters(in: .whitespaces).isEmpty)
-            .keyboardShortcut(.defaultAction)
-            Button { model.endLink() } label: {
-                Label("Cancel", systemImage: "xmark").labelStyle(.iconOnly)
-            }
-            .buttonStyle(.borderless)
-            .pointerStyle(.link)
+                .frame(maxWidth: .infinity)
+            Button { model.commitLink() } label: { Image(systemName: "checkmark") }
+                .buttonStyle(FormatButtonStyle(isOn: !url.isEmpty, isHovered: hovered == "apply"))
+                .onHover { hovered = $0 ? "apply" : (hovered == "apply" ? nil : hovered) }
+                .pointerStyle(.link)
+                .disabled(url.isEmpty)
+                .keyboardShortcut(.defaultAction)
+                .help("Apply Link  ↩")
+                .accessibilityLabel("Apply Link")
+            Button { model.endLink() } label: { Image(systemName: "xmark") }
+                .buttonStyle(FormatButtonStyle(isOn: false, isHovered: hovered == "cancel"))
+                .onHover { hovered = $0 ? "cancel" : (hovered == "cancel" ? nil : hovered) }
+                .pointerStyle(.link)
+                .help("Cancel  ⎋")
+                .accessibilityLabel("Cancel")
         }
-        .controlSize(.large)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(BarMetrics.inset)
         .onAppear { linkFocused = true }
     }
 }
