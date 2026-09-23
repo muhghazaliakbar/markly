@@ -9,7 +9,7 @@ Read this before changing anything. It records how the app is put together and t
 - **No AI attribution in commits or PRs.** Never add `Co-Authored-By: Claude …`, "Generated with …", or any trailer naming an AI tool. Commits are authored as the repository owner's git identity with plain messages.
 - **Native first.** SwiftUI/AppKit controls, Liquid Glass (`glassEffect`, `GlassEffectContainer`, `.buttonStyle(.glass)`), SF Symbols, system springs. No custom look where a system one exists. Concentric corners, 4 pt grid.
 - **Typing must never wait on the UI.** See *Performance* below; don't regress it.
-- **Private by default.** No analytics or telemetry. Network use only for what the user allows in Settings › Privacy (enforced with a Content-Security-Policy) and Git sync.
+- **Private by default.** No analytics or telemetry. Network use only for what the user allows in Settings › Privacy (enforced with a Content-Security-Policy), Git sync, and update checks the user agreed to (Sparkle asks on the second launch; system profiling stays off).
 - **Plain Markdown in plain folders.** Never write app state into the user's notes or folders.
 - **Prove fixes.** Reproduce a bug, fix it, and show evidence (a test, a measurement, a screenshot). Several "fixes" in this codebase's history were wrong until measured.
 
@@ -47,6 +47,7 @@ Preferences live in the `app.markly.Markly` defaults domain.
 | `GlassControls.swift` | Shared glass controls (`GlassSegmented`, `GlassTile`, `TickSlider`, `GlassChip`), `GlassStyle` animation presets, `BehindWindowBlur`, `ProgressiveBlur` |
 | `GitViews.swift`, `GitService.swift` | Sidebar Git button/card and the `git` CLI wrapper |
 | `ImageStore.swift` | Inline image loading/cache |
+| `Updater.swift` | Sparkle updater (`AppUpdater`), "Check for Updates…" command; feed and public key in `Info.plist` |
 | `Settings.swift` | Preference enums, `Pref` keys (`Pref.all` is used by Reset All Settings), `EditorStyle` |
 
 ## Performance rules
@@ -73,6 +74,7 @@ Preferences live in the `app.markly.Markly` defaults domain.
 - **`window.scrollTo` applies on the next frame**; tests must wait before measuring.
 - **NSTextView's `textContainerOrigin` can be overridden** for asymmetric insets; setting `contentInsets` manually disables automatic top insets under the toolbar.
 - **Programmatic cursor warps don't generate hover events**, so hover can't be verified by automation.
+- **Sparkle is signed inside-out, never with `codesign --deep`** (its XPC services, `Autoupdate` and `Updater.app` first, then the framework, then the app) — `scripts/build-app.sh` does this for ad-hoc and Developer ID alike. The EdDSA private key matching `SUPublicEDKey` lives in the maintainer's login keychain and the `SPARKLE_PRIVATE_KEY` secret; losing it means users can't auto-update past that point. Test updates end to end with a throwaway key and a local feed (two copies of the app, `python3 -m http.server`), not the real key.
 - **Git is scoped to the notes folder.** Notes often live inside a bigger repo (a project's `docs/`, or this repo's sample notes). Every status/add/commit uses a pathspec for the sidebar root holding the note, and Sync commits only the files the user left checked (`commit -- <paths>` keeps other staged files out). `GitTests` guards this.
 
 ## Verifying UI changes on a real Mac

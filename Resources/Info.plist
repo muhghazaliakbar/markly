@@ -63,6 +63,10 @@
 	<string>26.0</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/muhghazaliakbar/markly/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>Dbwhx2odTZsZyBd6YQ2b02HLmfcpewKg8U5qCuTUH/Y=</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>MIT License</string>
 </dict>

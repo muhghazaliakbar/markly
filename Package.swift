@@ -8,15 +8,18 @@ let package = Package(
         .executable(name: "Markly", targets: ["Markly"])
     ],
     dependencies: [
-        .package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.5.0")
+        .package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.5.0"),
+        .package(url: "https://github.com/sparkle-project/Sparkle.git", from: "2.10.0")
     ],
     targets: [
         .executableTarget(
             name: "Markly",
             dependencies: [
-                .product(name: "Markdown", package: "swift-markdown")
+                .product(name: "Markdown", package: "swift-markdown"),
+                .product(name: "Sparkle", package: "Sparkle")
             ],
-            path: "Sources/Markly"
+            path: "Sources/Markly",
+            linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]
         ),
         .testTarget(
             name: "MarklyTests",
