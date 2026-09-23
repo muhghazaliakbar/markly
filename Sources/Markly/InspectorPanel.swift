@@ -22,13 +22,20 @@ struct InspectorPanel: View {
     private var tint: Color { accent.color }
 
     var body: some View {
-        ScrollView {
+        // The theme picker is a fixed header so the scroll view never touches the toolbar: macOS gives a
+        // scroll view at the toolbar edge its own backing, revealed on hover as a mismatched rectangle.
+        VStack(spacing: 0) {
+            GlassEffectContainer {
+                GlassSegmented(
+                    options: AppTheme.allCases.map { .init(value: $0, icon: $0.icon, help: $0.label) },
+                    selection: $theme, accent: tint)
+            }
+            .padding([.horizontal, .top], 14)
+            .padding(.bottom, 12)
+
+            ScrollView {
             GlassEffectContainer(spacing: 6) {
                 VStack(spacing: 12) {
-                    GlassSegmented(
-                        options: AppTheme.allCases.map { .init(value: $0, icon: $0.icon, help: $0.label) },
-                        selection: $theme, accent: tint)
-
                     tiles
 
                     GlassSegmented(
@@ -67,13 +74,12 @@ struct InspectorPanel: View {
                     .buttonStyle(.plain)
                     .glassEffect(.regular.interactive(), in: Capsule())
                 }
-                .padding(14)
+                .padding([.horizontal, .bottom], 14)
             }
+            }
+            .scrollIndicators(.never)
+            .scrollEdgeEffectHidden(true, for: .all)
         }
-        .scrollIndicators(.never)
-        // The cards are glass already; the toolbar's scroll-edge backing (shown on hover) would paint a
-        // mismatched rectangle above the panel.
-        .scrollEdgeEffectHidden(true, for: .all)
         .frame(width: 312)
         .onChange(of: theme) { _, t in t.apply() }
         .sheet(isPresented: $showShortcuts) { ShortcutsSheet() }

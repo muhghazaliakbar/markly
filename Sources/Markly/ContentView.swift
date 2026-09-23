@@ -42,9 +42,6 @@ struct ContentView: View {
             }
         }
         .tint(accent.color)
-        // The window's own background shows wherever the system draws toolbar backing (for example the
-        // scroll pocket that appears on hover over the panel). Matching the editor makes it invisible.
-        .containerBackground(Color(nsColor: .textBackgroundColor), for: .window)
         .onAppear {
             panelMounted = showPanel
             panelVisible = showPanel
