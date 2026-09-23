@@ -199,4 +199,24 @@ final class EditorTests: XCTestCase {
         XCTAssertEqual(tv.selectedRange().location, 5, "caret restored for file B")
         XCTAssertFalse(coordinator.undoManager(for: tv) === undoA, "each file has its own undo history")
     }
+
+    func testFormatStateForSelection() {
+        let tv = makeEditor("a **bold** and *it* word", select: NSRange(location: 4, length: 4))  // "bold"
+        XCTAssertEqual(tv.formatState(), [.bold], "bold is not mistaken for italic")
+        tv.setSelectedRange(NSRange(location: 16, length: 2))  // "it"
+        XCTAssertEqual(tv.formatState(), [.italic])
+        tv.setSelectedRange(NSRange(location: 20, length: 4))  // "word"
+        XCTAssertEqual(tv.formatState(), [])
+    }
+
+    func testApplyAndRemoveLinkKeepsTextSelected() {
+        let tv = makeEditor("see docs here", select: NSRange(location: 4, length: 4))
+        tv.applyLink(" https://example.com ")
+        XCTAssertEqual(tv.string, "see [docs](https://example.com) here")
+        XCTAssertEqual((tv.string as NSString).substring(with: tv.selectedRange()), "docs")
+        XCTAssertTrue(tv.formatState().contains(.link))
+        XCTAssertTrue(tv.removeLink())
+        XCTAssertEqual(tv.string, "see docs here")
+        XCTAssertEqual((tv.string as NSString).substring(with: tv.selectedRange()), "docs")
+    }
 }

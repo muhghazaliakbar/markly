@@ -240,6 +240,7 @@ private struct AccentSwatch: View {
 
 private struct EditorBehaviorSettings: View {
     @AppStorage(Pref.smartLists) private var smartLists = true
+    @AppStorage(Pref.selectionToolbar) private var selectionToolbar = true
     @AppStorage(Pref.typewriter) private var typewriter = false
     @AppStorage(Pref.focusParagraph) private var focusParagraph = false
     @AppStorage(Pref.animateTransitions) private var animateTransitions = true
@@ -250,6 +251,10 @@ private struct EditorBehaviorSettings: View {
                 SettingRow(icon: "list.bullet", color: .orange, title: "Smart lists",
                            detail: "Return continues a list and numbers count up; Tab and ⇧Tab indent items.") {
                     Toggle("", isOn: $smartLists).labelsHidden().toggleStyle(.switch)
+                }
+                SettingRow(icon: "textformat", color: .blue, title: "Format bar on selection",
+                           detail: "Select text to get bold, italic, links, headings and more in a floating bar.") {
+                    Toggle("", isOn: $selectionToolbar).labelsHidden().toggleStyle(.switch)
                 }
             } header: {
                 Label("Writing", systemImage: "pencil.line")

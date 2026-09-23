@@ -187,6 +187,7 @@ enum Pref {
     static let animateTransitions = "animateTransitions"
     static let reopenLastNote = "reopenLastNote"
     static let newNoteExtension = "newNoteExtension"
+    static let selectionToolbar = "selectionToolbar"
     // Privacy
     static let previewNetwork = "previewNetwork"
     static let remoteImages = "remoteImages"
@@ -194,7 +195,7 @@ enum Pref {
     /// Every key above, for "Reset All Settings". Folders in the sidebar are not settings and are kept.
     static let all = [font, fontSize, lineSpacing, editorWidth, syntax, theme, accent, spellCheck, showStatusBar,
                       imagePreview, accentCustom, typewriter, focusParagraph, smartLists, animateTransitions,
-                      reopenLastNote, newNoteExtension, previewNetwork, remoteImages, "showPreview", "showInspector"]
+                      reopenLastNote, newNoteExtension, selectionToolbar, previewNetwork, remoteImages, "showPreview", "showInspector"]
 
     static func bool(_ key: String, default value: Bool) -> Bool {
         UserDefaults.standard.object(forKey: key) as? Bool ?? value
@@ -226,4 +227,5 @@ struct EditorStyle: Equatable {
     var typewriter: Bool = false
     var focusParagraph: Bool = false
     var smartLists: Bool = true
+    var selectionToolbar: Bool = true
 }

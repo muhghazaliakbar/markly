@@ -17,6 +17,7 @@ Built with SwiftUI and AppKit (TextKit) and Apple's native **Liquid Glass** desi
   - **Shortcuts** and **About** (version, open-source notices, copy diagnostics, reset all settings).
 - **Inline image previews.** An image on its own line is drawn right in the editor at small, medium or full width.
 - **Git sync** from the sidebar. A button shows the branch and number of pending changes; its popover commits everything, pulls (rebase) and pushes in one click, or initializes a new repository.
+- **Format bar on selection.** Select text and a Liquid Glass bar appears above it, like Medium's inline editor: bold, italic, strikethrough, highlight, inline code, link (with an inline URL field, prefilled from the clipboard), large/small heading and quote. Active formats are lit; pressing one again removes it. Esc dismisses it; it can be turned off in Settings › Editor.
 - **Clickable tasks.** Click `[ ]` to check it off. ⌘-click a link to open it; relative `.md` links open inside the editor.
 - **Smart lists.** Return continues a list (numbers go up, checkboxes reset), Return on an empty item ends it, and Tab / ⇧Tab indent.
 - **Preview pane** (⌥⌘P) with GitHub-style rendering, KaTeX math and syntax highlighting.

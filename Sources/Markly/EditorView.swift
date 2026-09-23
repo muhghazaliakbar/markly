@@ -52,10 +52,22 @@ struct EditorView: NSViewRepresentable {
         scroll.autohidesScrollers = true
         scroll.drawsBackground = true
         scroll.backgroundColor = .textBackgroundColor
-        scroll.contentView.postsBoundsChangedNotifications = false
+        scroll.contentView.postsBoundsChangedNotifications = true
         let containerView = EditorContainerView(scrollView: scroll)
 
         let coordinator = context.coordinator
+        let toolbar = SelectionToolbarController(container: containerView, textView: textView)
+        coordinator.toolbar = toolbar
+        textView.onCancel = { [weak toolbar] in
+            guard let toolbar, toolbar.model.visible else { return false }
+            toolbar.hide()
+            return true
+        }
+        coordinator.scrollObserver = NotificationCenter.default.addObserver(
+            forName: NSView.boundsDidChangeNotification, object: scroll.contentView, queue: .main
+        ) { [weak toolbar] _ in
+            MainActor.assumeIsolated { toolbar?.reposition() }
+        }
         coordinator.documentID = documentID
         coordinator.textView = textView
         coordinator.highlighter.imageProvider = { [weak coordinator] src in
@@ -97,6 +109,7 @@ struct EditorView: NSViewRepresentable {
         }
     }
 
+    @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: EditorView
         weak var textView: MarkdownTextView?
@@ -109,6 +122,8 @@ struct EditorView: NSViewRepresentable {
         private var pendingWidthWork: DispatchWorkItem?
         var revision = 0
         var documentID: URL?
+        var toolbar: SelectionToolbarController?
+        var scrollObserver: NSObjectProtocol?
         private var pendingStyle: EditorStyle?
 
         /// Per-file caret, scroll position and undo history, so returning to a note is seamless.
@@ -137,6 +152,7 @@ struct EditorView: NSViewRepresentable {
             let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
             let snapshot = animated && container.window != nil ? container.snapshot() : nil
 
+            toolbar?.hide()
             documentID = id
             editedRange = nil
             editTouchesBlocks = false
@@ -175,6 +191,7 @@ struct EditorView: NSViewRepresentable {
 
         deinit {
             if let imageObserver { NotificationCenter.default.removeObserver(imageObserver) }
+            if let scrollObserver { NotificationCenter.default.removeObserver(scrollObserver) }
         }
 
         private var hasImages: Bool { textView?.string.contains("![") ?? false }
@@ -207,6 +224,7 @@ struct EditorView: NSViewRepresentable {
             guard let tv = textView else { return }
             tv.maxContentWidth = style.maxWidth
             tv.smartLists = style.smartLists
+            toolbar?.enabled = style.selectionToolbar
             tv.typewriter = style.typewriter
             tv.insertionPointColor = style.accent.nsColor
             tv.isContinuousSpellCheckingEnabled = style.spellCheck
@@ -358,6 +376,7 @@ struct EditorView: NSViewRepresentable {
 
         func textViewDidChangeSelection(_ notification: Notification) {
             guard !highlighting else { return }
+            toolbar?.selectionChanged()
             if style.focusParagraph { updateFocusDim() }
             if style.typewriter {
                 // After the edit has been laid out.

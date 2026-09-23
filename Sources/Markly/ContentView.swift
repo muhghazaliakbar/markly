@@ -17,6 +17,7 @@ struct ContentView: View {
     @AppStorage(Pref.typewriter) private var typewriter = false
     @AppStorage(Pref.focusParagraph) private var focusParagraph = false
     @AppStorage(Pref.smartLists) private var smartLists = true
+    @AppStorage(Pref.selectionToolbar) private var selectionToolbar = true
     @AppStorage(Pref.animateTransitions) private var animateTransitions = true
     @AppStorage(Pref.previewNetwork) private var previewNetwork = true
     @AppStorage(Pref.remoteImages) private var remoteImages = true
@@ -33,7 +34,7 @@ struct ContentView: View {
         EditorStyle(font: font, fontSize: fontSize, lineSpacing: lineSpacing, maxWidth: editorWidth,
                     syntax: syntax, accent: accent, spellCheck: spellCheck, imagePreview: imagePreview,
                     accentHex: accent == .custom ? accentCustom : "", typewriter: typewriter,
-                    focusParagraph: focusParagraph, smartLists: smartLists)
+                    focusParagraph: focusParagraph, smartLists: smartLists, selectionToolbar: selectionToolbar)
     }
 
     var body: some View {

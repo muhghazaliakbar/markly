@@ -252,6 +252,73 @@ final class MarkdownTextView: NSTextView {
         }
     }
 
+    // MARK: Selection format state (for the floating format bar)
+
+    private func isWrapped(_ marker: String) -> Bool {
+        let r = selectedRange()
+        guard r.length > 0 else { return false }
+        let m = (marker as NSString).length
+        let s = ns.substring(with: r)
+        if r.length >= 2 * m, s.hasPrefix(marker), s.hasSuffix(marker) { return true }
+        guard r.location >= m, NSMaxRange(r) + m <= ns.length else { return false }
+        return ns.substring(with: NSRange(location: r.location - m, length: m)) == marker
+            && ns.substring(with: NSRange(location: NSMaxRange(r), length: m)) == marker
+    }
+
+    /// The `[text](url)` link whose text is exactly the selection, if any.
+    private func enclosingLink() -> (full: NSRange, text: NSRange)? {
+        let r = selectedRange()
+        guard r.length > 0, r.location > 0, NSMaxRange(r) + 2 < ns.length,
+              ns.character(at: r.location - 1) == 91,  // [
+              ns.substring(with: NSRange(location: NSMaxRange(r), length: 2)) == "](" else { return nil }
+        let after = NSRange(location: NSMaxRange(r) + 2, length: ns.length - NSMaxRange(r) - 2)
+        let close = ns.range(of: ")", options: [], range: after)
+        let newline = ns.range(of: "\n", options: [], range: after)
+        guard close.location != NSNotFound, newline.location == NSNotFound || close.location < newline.location else { return nil }
+        return (NSRange(location: r.location - 1, length: NSMaxRange(close) - r.location + 1), r)
+    }
+
+    func formatState() -> Set<FormatAction> {
+        var state = Set<FormatAction>()
+        if isWrapped("**") { state.insert(.bold) }
+        if isWrapped("*") && (!isWrapped("**") || isWrapped("***")) { state.insert(.italic) }
+        if isWrapped("~~") { state.insert(.strikethrough) }
+        if isWrapped("==") { state.insert(.highlight) }
+        if isWrapped("`") { state.insert(.code) }
+        if enclosingLink() != nil { state.insert(.link) }
+        let line = ns.substring(with: ns.lineRange(for: NSRange(location: selectedRange().location, length: 0)))
+        if line.hasPrefix("# ") { state.insert(.heading1) }
+        if line.hasPrefix("## ") { state.insert(.heading2) }
+        if line.hasPrefix(">") { state.insert(.quote) }
+        return state
+    }
+
+    /// Wraps the selection in a link, keeping the link text selected.
+    func applyLink(_ url: String) {
+        let r = selectedRange()
+        let s = ns.substring(with: r)
+        let target = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !target.isEmpty else { return }
+        replace(r, with: "[\(s)](\(target))", select: NSRange(location: r.location + 1, length: r.length))
+    }
+
+    /// Removes the link around the selection, keeping its text selected. Returns false if there was none.
+    @discardableResult
+    func removeLink() -> Bool {
+        guard let link = enclosingLink() else { return false }
+        let text = ns.substring(with: link.text)
+        replace(link.full, with: text, select: NSRange(location: link.full.location, length: link.text.length))
+        return true
+    }
+
+    var onCancel: (() -> Bool)?
+
+    /// Esc first dismisses the format bar.
+    override func cancelOperation(_ sender: Any?) {
+        if onCancel?() == true { return }
+        super.cancelOperation(sender)
+    }
+
     private func heading(_ level: Int) {
         let marker = String(repeating: "#", count: level) + " "
         setLinePrefix({ _ in marker }, matches: { $0.trimmingCharacters(in: .whitespaces) == marker.trimmingCharacters(in: .whitespaces) })
