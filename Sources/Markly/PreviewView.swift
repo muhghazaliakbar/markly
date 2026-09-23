@@ -15,6 +15,7 @@ struct PreviewView: NSViewRepresentable {
     var markdown: String
     var fileURL: URL?
     var accent: NSColor
+    var blurRadius: CGFloat = 0
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -28,6 +29,7 @@ struct PreviewView: NSViewRepresentable {
 
     func updateNSView(_ web: WKWebView, context: Context) {
         context.coordinator.schedule(web: web, markdown: markdown, fileURL: fileURL, accent: accent.hexString)
+        LayerBlur.set(blurRadius, on: web)
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate {

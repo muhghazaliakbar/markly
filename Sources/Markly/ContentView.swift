@@ -15,6 +15,8 @@ struct ContentView: View {
     @AppStorage(Pref.imagePreview) private var imagePreview = ImagePreview.medium
 
     @State private var columns = NavigationSplitViewVisibility.all
+    /// True while a slider in the panel is being dragged: the backdrop clears so the change is visible.
+    @State private var peeking = false
 
     private var style: EditorStyle {
         EditorStyle(font: font, fontSize: fontSize, lineSpacing: lineSpacing, maxWidth: editorWidth,
@@ -54,8 +56,9 @@ struct ContentView: View {
     }
 
     private var showPanel: Bool { workspace.showInspector && !workspace.focusMode }
-
-    private static let panelWidth: CGFloat = 312
+    /// Frosted, not erased: a light blur keeps the page's shape readable behind the panel.
+    /// Cleared while a slider is dragged so its effect is visible.
+    private var backdropBlur: CGFloat { showPanel && !peeking ? 8 : 0 }
 
     @ViewBuilder
     private var detail: some View {
@@ -67,11 +70,11 @@ struct ContentView: View {
                             EditorView(text: Binding(get: { workspace.text }, set: { workspace.text = $0 }),
                                        style: style, baseURL: url.deletingLastPathComponent(),
                                        revision: workspace.revision,
-                                       trailingReserve: showPanel ? Self.panelWidth : 0,
+                                       blurRadius: backdropBlur,
                                        onOpenLink: { workspace.followLink($0) })
                                 .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
                             if workspace.showPreview {
-                                LivePreview(live: workspace.live, fileURL: url, accent: accent.nsColor)
+                                LivePreview(live: workspace.live, fileURL: url, accent: accent.nsColor, blurRadius: backdropBlur)
                                     .frame(minWidth: 280, maxWidth: .infinity, maxHeight: .infinity)
                             }
                         }
@@ -92,13 +95,21 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // The panel floats over the editor instead of resizing it, so opening it never re-wraps text.
+            // The panel floats above the editor and never changes its layout. Behind it, a blurred,
+            // slightly dimmed backdrop; clicking it (or pressing Esc) closes the panel.
             if showPanel {
-                InspectorPanel(git: git)
-                    .frame(maxHeight: .infinity, alignment: .top)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing).combined(with: .opacity),
-                        removal: .move(edge: .trailing).combined(with: .opacity)))
+                PanelBackdrop(peeking: peeking) {
+                    withAnimation(GlassStyle.spring) { workspace.showInspector = false }
+                }
+                .transition(.opacity)
+
+                InspectorPanel(git: git, onSliderEditing: { editing in
+                    withAnimation(GlassStyle.snappy) { peeking = editing }
+                })
+                .frame(maxHeight: .infinity, alignment: .top)
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .move(edge: .trailing).combined(with: .opacity)))
             }
 
             if workspace.focusMode {
@@ -152,14 +163,35 @@ struct ContentView: View {
     }
 }
 
+/// Frosted layer over the editor while the appearance panel is open.
+struct PanelBackdrop: View {
+    var peeking: Bool
+    var close: () -> Void
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        Color.black
+            .opacity(peeking ? 0 : (scheme == .dark ? 0.22 : 0.08))
+            .ignoresSafeArea()
+            .contentShape(Rectangle())
+            .onTapGesture(perform: close)
+            .background {
+                Button("", action: close).keyboardShortcut(.cancelAction).hidden()
+            }
+            .accessibilityLabel("Close appearance panel")
+            .accessibilityAddTraits(.isButton)
+    }
+}
+
 /// Observes only the throttled live document, so the rest of the window doesn't re-render while typing.
 struct LivePreview: View {
     @ObservedObject var live: LiveDocument
     var fileURL: URL
     var accent: NSColor
+    var blurRadius: CGFloat = 0
 
     var body: some View {
-        PreviewView(markdown: live.text, fileURL: fileURL, accent: accent)
+        PreviewView(markdown: live.text, fileURL: fileURL, accent: accent, blurRadius: blurRadius)
     }
 }
 

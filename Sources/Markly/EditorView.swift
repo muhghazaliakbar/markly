@@ -7,8 +7,7 @@ struct EditorView: NSViewRepresentable {
     var baseURL: URL?
     /// Bumped when the text is replaced from outside the editor.
     var revision: Int = 0
-    /// Space on the right covered by the floating panel.
-    var trailingReserve: CGFloat = 0
+    var blurRadius: CGFloat = 0
     var onOpenLink: (String) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -63,7 +62,6 @@ struct EditorView: NSViewRepresentable {
         coordinator.apply(style: style)
         textView.string = text
         textView.setSelectedRange(NSRange(location: 0, length: 0))
-        textView.setTrailingReserve(trailingReserve, animated: false)
         coordinator.revision = revision
         coordinator.rehighlight()
 
@@ -76,7 +74,7 @@ struct EditorView: NSViewRepresentable {
         coordinator.parent = self
         guard let textView = coordinator.textView else { return }
         textView.onOpenLink = { onOpenLink($0) }
-        textView.setTrailingReserve(trailingReserve, animated: true)
+        LayerBlur.set(blurRadius, on: scroll)
         if coordinator.style != style {
             coordinator.scheduleStyle(style)
         }

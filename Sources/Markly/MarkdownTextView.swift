@@ -80,11 +80,6 @@ final class MarkdownLayoutManager: NSLayoutManager {
 /// the focused editor through the responder chain.
 final class MarkdownTextView: NSTextView {
     var maxContentWidth: CGFloat = 720 { didSet { if maxContentWidth != oldValue { updateInsets() } } }
-    /// Width covered by the floating panel on the right. The text column moves left to stay clear of it.
-    private(set) var trailingReserve: CGFloat = 0
-    private var columnX: CGFloat = 28
-    private var reserveAnimation: (from: CGFloat, to: CGFloat, start: CFTimeInterval)?
-    private var displayLinkRef: CADisplayLink?
     var onOpenLink: ((String) -> Void)?
     var onColumnWidthChange: ((CGFloat) -> Void)?
     private var lastColumnWidth: CGFloat = 0
@@ -104,67 +99,13 @@ final class MarkdownTextView: NSTextView {
 
     override var textContainerOrigin: NSPoint {
         // The inset is symmetric (top + bottom = 2 × height); starting text higher leaves the rest at the bottom.
-        NSPoint(x: columnX, y: Self.topMargin)
-    }
-
-    /// Glides the text column aside for the panel. Only the origin animates, so the text never re-wraps
-    /// mid-animation; the column width is set once, up front, for the final position.
-    func setTrailingReserve(_ reserve: CGFloat, animated: Bool) {
-        guard reserve != trailingReserve || reserveAnimation != nil else { return }
-        let from = currentReserve
-        trailingReserve = reserve
-        if animated, window != nil, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            reserveAnimation = (from, reserve, CACurrentMediaTime())
-            if displayLinkRef == nil {
-                let link = displayLink(target: self, selector: #selector(stepReserve(_:)))
-                link.add(to: .main, forMode: .common)
-                displayLinkRef = link
-            }
-        } else {
-            reserveAnimation = nil
-        }
-        updateInsets()
-    }
-
-    private var currentReserve: CGFloat {
-        guard let a = reserveAnimation else { return trailingReserve }
-        let t = min(1, (CACurrentMediaTime() - a.start) / 0.34)
-        // Ease-in-out cubic, close to SwiftUI's .smooth spring over the same duration.
-        let e = t < 0.5 ? 4 * t * t * t : 1 - pow(-2 * t + 2, 3) / 2
-        return a.from + (a.to - a.from) * e
-    }
-
-    @objc private func stepReserve(_ link: CADisplayLink) {
-        if let a = reserveAnimation, CACurrentMediaTime() - a.start >= 0.34 {
-            reserveAnimation = nil
-        }
-        updateColumnX()
-        if reserveAnimation == nil {
-            link.invalidate()
-            displayLinkRef = nil
-        }
-    }
-
-    private func updateColumnX() {
-        let column = textContainer?.size.width ?? maxContentWidth
-        let available = bounds.width - currentReserve
-        let centered = ((available - column) / 2).rounded()
-        let x = max(28, min(((bounds.width - column) / 2).rounded(), centered))
-        if x != columnX {
-            columnX = x
-            invalidateTextContainerOrigin()
-            needsDisplay = true
-        }
+        NSPoint(x: textContainerInset.width, y: Self.topMargin)
     }
 
     private func updateInsets() {
-        // Column width comes from the *target* reserve so it doesn't change during the glide.
-        let available = bounds.width - trailingReserve
-        let column = max(240, min(maxContentWidth, available - 56))
-        let horizontal = max(28, ((bounds.width - column) / 2).rounded())
+        let horizontal = max(28, ((bounds.width - maxContentWidth) / 2).rounded())
         let inset = NSSize(width: horizontal, height: (Self.topMargin + Self.bottomMargin) / 2)
         if textContainerInset != inset { textContainerInset = inset }
-        updateColumnX()
         let width = columnWidth
         if abs(width - lastColumnWidth) > 1 {
             lastColumnWidth = width
