@@ -145,4 +145,30 @@ final class EditorTests: XCTestCase {
         monitor.isActive = false
         XCTAssertFalse(monitor.shouldClose(forClickAt: NSPoint(x: 500, y: midY)), "panel already closed")
     }
+
+    func testContentSecurityPolicyFollowsPrivacySettings() {
+        let open = MarkdownRenderer.contentSecurityPolicy(network: true, remoteImages: true)
+        XCTAssertTrue(open.contains("script-src 'unsafe-inline' https://cdn.jsdelivr.net"))
+        XCTAssertTrue(open.contains("img-src file: data: https: http:"))
+
+        let closed = MarkdownRenderer.contentSecurityPolicy(network: false, remoteImages: false)
+        XCTAssertFalse(closed.contains("jsdelivr"))
+        XCTAssertFalse(closed.contains("https:"))
+        XCTAssertTrue(closed.hasPrefix("default-src 'none'"))
+    }
+
+    func testParagraphRangeForFocusMode() {
+        let ns = "first line\nsecond line\n\nthird\n" as NSString
+        let p1 = EditorView.Coordinator.paragraphRange(in: ns, at: 3)
+        XCTAssertEqual(ns.substring(with: p1), "first line\nsecond line\n")
+        let p2 = EditorView.Coordinator.paragraphRange(in: ns, at: ns.range(of: "third").location)
+        XCTAssertEqual(ns.substring(with: p2), "third\n")
+    }
+
+    func testSmartListsCanBeTurnedOff() {
+        let tv = makeEditor("- item")
+        tv.smartLists = false
+        tv.insertNewline(nil)
+        XCTAssertEqual(tv.string, "- item\n")
+    }
 }

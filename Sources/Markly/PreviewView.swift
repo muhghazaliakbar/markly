@@ -15,6 +15,7 @@ struct PreviewView: NSViewRepresentable {
     var markdown: String
     var fileURL: URL?
     var accent: NSColor
+    var reloadKey: String = ""
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -27,7 +28,7 @@ struct PreviewView: NSViewRepresentable {
     }
 
     func updateNSView(_ web: WKWebView, context: Context) {
-        context.coordinator.schedule(web: web, markdown: markdown, fileURL: fileURL, accent: accent.hexString)
+        context.coordinator.schedule(web: web, markdown: markdown, fileURL: fileURL, accent: accent.hexString + reloadKey)
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate {
@@ -45,7 +46,7 @@ struct PreviewView: NSViewRepresentable {
                 lastMarkdown = markdown
                 let html = MarkdownRenderer.page(title: fileURL?.lastPathComponent ?? "Preview",
                                                  body: MarkdownRenderer.html(from: markdown),
-                                                 baseURL: fileURL?.deletingLastPathComponent(), accentHex: accent)
+                                                 baseURL: fileURL?.deletingLastPathComponent(), accentHex: String(accent.prefix(7)))
                 web.alphaValue = 0
                 // Write to a temp file so relative image paths next to the document can load.
                 let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("markly-preview.html")

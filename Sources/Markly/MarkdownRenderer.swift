@@ -57,15 +57,34 @@ enum MarkdownRenderer {
     </script>
     """
 
+    /// Content-Security-Policy for rendered pages. It is the enforcement point for the Privacy settings:
+    /// with network scripts off, nothing but inline code runs; with remote images off, only local files load.
+    static func contentSecurityPolicy(network: Bool, remoteImages: Bool) -> String {
+        let cdn = network ? " https://cdn.jsdelivr.net" : ""
+        let images = remoteImages ? " https: http:" : ""
+        return "default-src 'none'; script-src 'unsafe-inline'\(cdn); style-src 'unsafe-inline'\(cdn); "
+            + "font-src\(cdn) data:; img-src file: data:\(images); media-src file:\(images)"
+    }
+
+    /// Without network access: just the update hook, no math typesetting or code colouring.
+    static let localScripts = """
+    <script>
+    function __update(html) { document.getElementById("content").innerHTML = html; }
+    </script>
+    """
+
     /// A standalone document, used for the live preview and for export.
     static func page(title: String, body: String, baseURL: URL?, accentHex: String) -> String {
         let base = baseURL.map { "<base href=\"\($0.absoluteString)\">" } ?? ""
+        let network = Pref.bool(Pref.previewNetwork, default: true)
+        let csp = contentSecurityPolicy(network: network, remoteImages: Pref.bool(Pref.remoteImages, default: true))
         return """
         <!doctype html>
         <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta http-equiv="Content-Security-Policy" content="\(csp)">
         <title>\(escape(title))</title>\(base)
         <style>\(css) :root { --accent: \(accentHex); }</style>
-        \(scripts)
+        \(network ? scripts : localScripts)
         </head><body><article id="content">\(body)</article></body></html>
         """
     }

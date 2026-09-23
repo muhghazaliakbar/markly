@@ -13,6 +13,13 @@ struct ContentView: View {
     @AppStorage(Pref.spellCheck) private var spellCheck = true
     @AppStorage(Pref.showStatusBar) private var showStatusBar = true
     @AppStorage(Pref.imagePreview) private var imagePreview = ImagePreview.medium
+    @AppStorage(Pref.accentCustom) private var accentCustom = ""
+    @AppStorage(Pref.typewriter) private var typewriter = false
+    @AppStorage(Pref.focusParagraph) private var focusParagraph = false
+    @AppStorage(Pref.smartLists) private var smartLists = true
+    @AppStorage(Pref.animateTransitions) private var animateTransitions = true
+    @AppStorage(Pref.previewNetwork) private var previewNetwork = true
+    @AppStorage(Pref.remoteImages) private var remoteImages = true
 
     @State private var columns = NavigationSplitViewVisibility.all
     /// The panel's frame in window (global) coordinates, so clicks outside it can close it.
@@ -24,7 +31,9 @@ struct ContentView: View {
 
     private var style: EditorStyle {
         EditorStyle(font: font, fontSize: fontSize, lineSpacing: lineSpacing, maxWidth: editorWidth,
-                    syntax: syntax, accent: accent, spellCheck: spellCheck, imagePreview: imagePreview)
+                    syntax: syntax, accent: accent, spellCheck: spellCheck, imagePreview: imagePreview,
+                    accentHex: accent == .custom ? accentCustom : "", typewriter: typewriter,
+                    focusParagraph: focusParagraph, smartLists: smartLists)
     }
 
     var body: some View {
@@ -94,7 +103,8 @@ struct ContentView: View {
                                        onOpenLink: { workspace.followLink($0) })
                                 .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
                             if workspace.showPreview {
-                                LivePreview(live: workspace.live, fileURL: url, accent: accent.nsColor)
+                                LivePreview(live: workspace.live, fileURL: url, accent: accent.nsColor,
+                                            privacyKey: "\(previewNetwork)\(remoteImages)\(accentCustom)")
                                     .frame(minWidth: 280, maxWidth: .infinity, maxHeight: .infinity)
                             }
                         }
@@ -105,7 +115,7 @@ struct ContentView: View {
                             .transition(.opacity)
                     }
                 }
-                .animation(GlassStyle.fade, value: workspace.currentURL)
+                .animation(animateTransitions ? GlassStyle.fade : nil, value: workspace.currentURL)
 
                 if showStatusBar && !workspace.focusMode && workspace.currentURL != nil {
                     StatusPill(live: workspace.live)
@@ -272,9 +282,11 @@ struct LivePreview: View {
     @ObservedObject var live: LiveDocument
     var fileURL: URL
     var accent: NSColor
+    /// Reloads the page when privacy settings (or a custom accent) change.
+    var privacyKey: String = ""
 
     var body: some View {
-        PreviewView(markdown: live.text, fileURL: fileURL, accent: accent)
+        PreviewView(markdown: live.text, fileURL: fileURL, accent: accent, reloadKey: privacyKey)
     }
 }
 

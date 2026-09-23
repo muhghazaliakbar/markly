@@ -145,6 +145,8 @@ struct EditorView: NSViewRepresentable {
             highlighter.style = style
             guard let tv = textView else { return }
             tv.maxContentWidth = style.maxWidth
+            tv.smartLists = style.smartLists
+            tv.typewriter = style.typewriter
             tv.insertionPointColor = style.accent.nsColor
             tv.isContinuousSpellCheckingEnabled = style.spellCheck
             tv.typingAttributes = highlighter.typingAttributes
@@ -174,6 +176,86 @@ struct EditorView: NSViewRepresentable {
             }
             highlighter.highlight(storage, active: active, limits: ranges)
             tv.typingAttributes = highlighter.typingAttributes
+            updateFocusDim(force: true)
+        }
+
+        // MARK: Focus paragraph
+
+        private var dimmedParagraph: NSRange?
+
+        /// Dims everything except the paragraph holding the caret. Uses the layout manager's temporary
+        /// attributes, so the text storage (and undo, and highlighting) is untouched.
+        func updateFocusDim(force: Bool = false) {
+            guard let tv = textView, let lm = tv.layoutManager else { return }
+            let ns = tv.string as NSString
+            let full = NSRange(location: 0, length: ns.length)
+            guard style.focusParagraph, ns.length > 0 else {
+                if dimmedParagraph != nil { lm.removeTemporaryAttribute(.foregroundColor, forCharacterRange: full) }
+                dimmedParagraph = nil
+                return
+            }
+            let paragraph = Self.paragraphRange(in: ns, at: tv.selectedRange().location)
+            guard force || paragraph != dimmedParagraph else { return }
+            dimmedParagraph = paragraph
+            lm.removeTemporaryAttribute(.foregroundColor, forCharacterRange: full)
+            let dim = NSColor.tertiaryLabelColor
+            if paragraph.location > 0 {
+                lm.addTemporaryAttribute(.foregroundColor, value: dim, forCharacterRange: NSRange(location: 0, length: paragraph.location))
+            }
+            let end = NSMaxRange(paragraph)
+            if end < ns.length {
+                lm.addTemporaryAttribute(.foregroundColor, value: dim, forCharacterRange: NSRange(location: end, length: ns.length - end))
+            }
+        }
+
+        /// The run of non-blank lines around `location`.
+        static func paragraphRange(in ns: NSString, at location: Int) -> NSRange {
+            let loc = min(location, ns.length)
+            func isBlank(_ r: NSRange) -> Bool {
+                ns.substring(with: r).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+            var start = ns.lineRange(for: NSRange(location: loc, length: 0))
+            if isBlank(start) { return start }
+            var end = start
+            while start.location > 0 {
+                let prev = ns.lineRange(for: NSRange(location: start.location - 1, length: 0))
+                if isBlank(prev) { break }
+                start = prev
+            }
+            while NSMaxRange(end) < ns.length {
+                let next = ns.lineRange(for: NSRange(location: NSMaxRange(end), length: 0))
+                if isBlank(next) { break }
+                end = next
+            }
+            return NSRange(location: start.location, length: NSMaxRange(end) - start.location)
+        }
+
+        // MARK: Typewriter scrolling
+
+        func centerCaret() {
+            guard style.typewriter, let tv = textView, tv.selectedRange().length == 0,
+                  NSEvent.pressedMouseButtons == 0,  // don't fight a mouse selection
+                  let lm = tv.layoutManager,
+                  let clip = tv.enclosingScrollView?.contentView else { return }
+            let ns = tv.string as NSString
+            let loc = tv.selectedRange().location
+            var rect: NSRect
+            if ns.length == 0 || (loc >= ns.length && !lm.extraLineFragmentRect.isEmpty) {
+                rect = lm.extraLineFragmentRect
+            } else {
+                let glyph = lm.glyphIndexForCharacter(at: min(loc, ns.length - 1))
+                rect = lm.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+            }
+            rect.origin.y += tv.textContainerOrigin.y
+            let maxY = max(0, tv.frame.height - clip.bounds.height)
+            let target = min(max(0, (rect.midY - clip.bounds.height / 2).rounded()), maxY)
+            guard abs(target - clip.bounds.origin.y) > 1 else { return }
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.18
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                clip.animator().setBoundsOrigin(NSPoint(x: clip.bounds.origin.x, y: target))
+            }
+            tv.enclosingScrollView?.reflectScrolledClipView(clip)
         }
 
         /// Don't flag spelling inside collapsed (hidden) Markdown syntax.
@@ -214,7 +296,13 @@ struct EditorView: NSViewRepresentable {
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
-            guard style.syntax == .focused, let tv = textView, !highlighting else { return }
+            guard !highlighting else { return }
+            if style.focusParagraph { updateFocusDim() }
+            if style.typewriter {
+                // After the edit has been laid out.
+                DispatchQueue.main.async { [weak self] in self?.centerCaret() }
+            }
+            guard style.syntax == .focused, let tv = textView else { return }
             // Only restyle when the caret moves to a different line.
             let active = activeLines(tv)
             guard active != lastActive else { return }

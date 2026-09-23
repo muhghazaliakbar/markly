@@ -116,7 +116,8 @@ final class Workspace: ObservableObject {
         roots = saved.filter { FileManager.default.fileExists(atPath: $0.path) }
         collapsed = Set((defaults.stringArray(forKey: "collapsedRoots") ?? []).map { URL(fileURLWithPath: $0) })
         refresh()
-        if let last = defaults.string(forKey: "lastFile"), FileManager.default.fileExists(atPath: last),
+        if Pref.bool(Pref.reopenLastNote, default: true),
+           let last = defaults.string(forKey: "lastFile"), FileManager.default.fileExists(atPath: last),
            root(containing: URL(fileURLWithPath: last)) != nil {
             selection = URL(fileURLWithPath: last)
         }
@@ -293,7 +294,8 @@ final class Workspace: ObservableObject {
     @discardableResult
     func newFile(in folder: URL? = nil) -> URL? {
         guard let folder = folder ?? folderForNewItem() else { return nil }
-        let url = uniqueURL(in: folder, base: "Untitled", ext: "md")
+        let ext = defaults.string(forKey: Pref.newNoteExtension) ?? "md"
+        let url = uniqueURL(in: folder, base: "Untitled", ext: ext)
         do {
             try "".write(to: url, atomically: true, encoding: .utf8)
             refresh()

@@ -10,7 +10,11 @@ Built with SwiftUI and AppKit (TextKit) and Apple's native **Liquid Glass** desi
 - **Syntax that gets out of the way.** Markers like `**` and `#` collapse on lines you aren't editing and reappear when the caret moves there. You can also choose to always show them, or never show them.
 - **Folders, not libraries.** Add as many folders as you like to the sidebar, browse nested notes, filter by name (⇧⌘L), and create, rename, reveal or trash files. Jump to the first nine notes with ⌘1–⌘9. Changes save automatically to the original file, and files edited elsewhere (git, other editors) reload on their own.
 - **Editor settings panel** (⌥⌘I or the Aa button). A floating Liquid Glass panel for everything that shapes the page you're writing: text size, typeface, inline image previews, syntax visibility, line spacing, editor width and spell checking. The page stays sharp and editable beside it, so changes show up immediately. A progressive blur sits only behind the panel.
-- **App settings** (⌘,). A standard Settings window for app-wide preferences: appearance (Light, Dark, Auto), accent color and word count, plus a list of keyboard shortcuts.
+- **App settings** (⌘,). A standard Settings window with five tabs:
+  - **General:** appearance (Light, Dark, Auto), accent color (presets or any custom color), reopen last note, word count, file extension for new notes.
+  - **Editor:** smart lists, *typewriter scrolling* (the line you're writing stays centred), *focus on paragraph* (everything else dims), note transition animation.
+  - **Privacy:** Markly has no accounts, analytics or tracking. You can turn off the preview's CDN scripts (KaTeX, highlight.js) and loading images from the web; both are enforced with a Content-Security-Policy.
+  - **Shortcuts** and **About** (version, open-source notices, copy diagnostics, reset all settings).
 - **Inline image previews.** An image on its own line is drawn right in the editor at small, medium or full width.
 - **Git sync** from the sidebar. A button shows the branch and number of pending changes; its popover commits everything, pulls (rebase) and pushes in one click, or initializes a new repository.
 - **Clickable tasks.** Click `[ ]` to check it off. ⌘-click a link to open it; relative `.md` links open inside the editor.

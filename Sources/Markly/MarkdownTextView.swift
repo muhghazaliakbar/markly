@@ -97,6 +97,21 @@ final class MarkdownTextView: NSTextView {
     /// Extra room after the last line so the floating word-count pill never covers it.
     private static let bottomMargin: CGFloat = 96
 
+    /// Continue lists on Return and indent them with Tab.
+    var smartLists = true
+    /// Keep the caret line vertically centred; needs half a screen of space after the last line.
+    var typewriter = false { didSet { if typewriter != oldValue { updateInsets() } } }
+
+    override func resize(withOldSuperviewSize oldSize: NSSize) {
+        super.resize(withOldSuperviewSize: oldSize)
+        if typewriter { updateInsets() }
+    }
+
+    private var bottomSpace: CGFloat {
+        guard typewriter, let visible = enclosingScrollView?.contentView.bounds.height else { return Self.bottomMargin }
+        return max(Self.bottomMargin, (visible / 2).rounded())
+    }
+
     override var textContainerOrigin: NSPoint {
         // The inset is symmetric (top + bottom = 2 × height); starting text higher leaves the rest at the bottom.
         NSPoint(x: textContainerInset.width, y: Self.topMargin)
@@ -104,7 +119,7 @@ final class MarkdownTextView: NSTextView {
 
     private func updateInsets() {
         let horizontal = max(28, ((bounds.width - maxContentWidth) / 2).rounded())
-        let inset = NSSize(width: horizontal, height: (Self.topMargin + Self.bottomMargin) / 2)
+        let inset = NSSize(width: horizontal, height: (Self.topMargin + bottomSpace) / 2)
         if textContainerInset != inset { textContainerInset = inset }
         let width = columnWidth
         if abs(width - lastColumnWidth) > 1 {
@@ -289,6 +304,7 @@ final class MarkdownTextView: NSTextView {
     private static let listItem = try! NSRegularExpression(pattern: #"^(\s*)(?:(>\s?)+)?([-*+]|(\d+)([.)]))(\s+)(\[[ xX]\]\s+)?"#)
 
     private func currentListMatch() -> (line: NSRange, match: NSTextCheckingResult, text: String)? {
+        guard smartLists else { return nil }
         let caret = selectedRange()
         let lineRange = ns.lineRange(for: NSRange(location: caret.location, length: 0))
         var line = ns.substring(with: lineRange)

@@ -27,7 +27,10 @@ final class ImageStore {
         let src = source.trimmingCharacters(in: .whitespaces)
         guard !src.isEmpty else { return nil }
         if let url = URL(string: src), let scheme = url.scheme?.lowercased() {
-            if scheme == "http" || scheme == "https" || scheme == "file" { return url }
+            if scheme == "file" { return url }
+            if scheme == "http" || scheme == "https" {
+                return Pref.bool(Pref.remoteImages, default: true) ? url : nil
+            }
             return nil
         }
         let path = src.removingPercentEncoding ?? src

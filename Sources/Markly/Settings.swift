@@ -127,12 +127,22 @@ enum AppTheme: String, CaseIterable, Identifiable {
 }
 
 enum AccentChoice: String, CaseIterable, Identifiable {
-    case system, blue, purple, pink, red, orange, yellow, green, graphite
+    case system, blue, purple, pink, red, orange, yellow, green, graphite, custom
     var id: Self { self }
-    var label: String { self == .system ? "macOS Accent" : rawValue.capitalized }
+    var label: String {
+        switch self {
+        case .system: "macOS Accent"
+        case .custom: "Custom"
+        default: rawValue.capitalized
+        }
+    }
+
+    /// The fixed presets shown as swatches (custom has its own color well).
+    static var presets: [AccentChoice] { allCases.filter { $0 != .custom } }
 
     var nsColor: NSColor {
         switch self {
+        case .custom: NSColor(hex: UserDefaults.standard.string(forKey: Pref.accentCustom) ?? "") ?? .controlAccentColor
         case .system: .controlAccentColor
         case .blue: .systemBlue
         case .purple: .systemPurple
@@ -169,6 +179,36 @@ enum Pref {
     static let spellCheck = "spellCheck"
     static let showStatusBar = "showStatusBar"
     static let imagePreview = "imagePreview"
+    static let accentCustom = "accentCustom"
+    // Editor behavior
+    static let typewriter = "typewriterScrolling"
+    static let focusParagraph = "focusParagraph"
+    static let smartLists = "smartLists"
+    static let animateTransitions = "animateTransitions"
+    static let reopenLastNote = "reopenLastNote"
+    static let newNoteExtension = "newNoteExtension"
+    // Privacy
+    static let previewNetwork = "previewNetwork"
+    static let remoteImages = "remoteImages"
+
+    /// Every key above, for "Reset All Settings". Folders in the sidebar are not settings and are kept.
+    static let all = [font, fontSize, lineSpacing, editorWidth, syntax, theme, accent, spellCheck, showStatusBar,
+                      imagePreview, accentCustom, typewriter, focusParagraph, smartLists, animateTransitions,
+                      reopenLastNote, newNoteExtension, previewNetwork, remoteImages, "showPreview", "showInspector"]
+
+    static func bool(_ key: String, default value: Bool) -> Bool {
+        UserDefaults.standard.object(forKey: key) as? Bool ?? value
+    }
+}
+
+extension NSColor {
+    convenience init?(hex: String) {
+        var s = hex.trimmingCharacters(in: .whitespaces)
+        if s.hasPrefix("#") { s.removeFirst() }
+        guard s.count == 6, let v = UInt32(s, radix: 16) else { return nil }
+        self.init(srgbRed: CGFloat((v >> 16) & 0xff) / 255, green: CGFloat((v >> 8) & 0xff) / 255,
+                  blue: CGFloat(v & 0xff) / 255, alpha: 1)
+    }
 }
 
 /// Everything the text view needs to know to style the document.
@@ -181,4 +221,9 @@ struct EditorStyle: Equatable {
     var accent: AccentChoice = .system
     var spellCheck: Bool = true
     var imagePreview: ImagePreview = .medium
+    /// Changes when a custom accent is picked, so the editor restyles.
+    var accentHex: String = ""
+    var typewriter: Bool = false
+    var focusParagraph: Bool = false
+    var smartLists: Bool = true
 }
