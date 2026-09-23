@@ -1,0 +1,141 @@
+name: Release
+
+# Push a tag like v0.3.0 to build, sign and publish a GitHub release.
+# Developer ID signing and notarisation run only when these secrets exist:
+#   MACOS_CERTIFICATE           base64 of the Developer ID Application .p12
+#   MACOS_CERTIFICATE_PASSWORD  password of that .p12
+#   APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD  (app-specific password) for notarytool
+# Without them the app is ad-hoc signed and users must allow it once in
+# System Settings › Privacy & Security.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to build (e.g. 0.3.0). Builds an artifact only; no release is published.
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      HAS_SIGNING: ${{ secrets.MACOS_CERTIFICATE != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then V="${GITHUB_REF_NAME#v}"; else V="${{ inputs.version }}"; fi
+          echo "VERSION=$V" >> "$GITHUB_ENV"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $V" Resources/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${GITHUB_RUN_NUMBER}" Resources/Info.plist
+
+      - name: Test
+        run: swift test
+
+      - name: Build universal app
+        run: |
+          scripts/build-app.sh
+          ARCHS="$(lipo -archs build/Markly.app/Contents/MacOS/Markly)"
+          echo "Architectures: $ARCHS"
+          case "$ARCHS" in *arm64*x86_64*|*x86_64*arm64*) ;; *) echo "::error::Not a universal binary"; exit 1;; esac
+
+      - name: Import Developer ID certificate
+        if: env.HAS_SIGNING == 'true'
+        env:
+          CERT: ${{ secrets.MACOS_CERTIFICATE }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          echo "$CERT" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/cert.p12"
+          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" | grep 'Developer ID Application' | head -1 | awk -F'"' '{print $2}')"
+          [ -n "$IDENTITY" ] || { echo "::error::No Developer ID Application identity in the certificate"; exit 1; }
+          echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+
+      - name: Sign with Developer ID
+        if: env.HAS_SIGNING == 'true'
+        run: |
+          codesign --force --deep --options runtime --timestamp --sign "$SIGN_IDENTITY" build/Markly.app
+          codesign --verify --strict --verbose=2 build/Markly.app
+
+      - name: Package
+        run: scripts/make-dmg.sh "$VERSION"
+
+      - name: Notarise
+        if: env.HAS_SIGNING == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          DMG="build/Markly-$VERSION.dmg"
+          codesign --force --timestamp --sign "$SIGN_IDENTITY" "$DMG"
+          xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
+          xcrun stapler staple "$DMG"
+          xcrun stapler staple build/Markly.app
+          spctl --assess --type open --context context:primary-signature --verbose=2 "$DMG"
+          # Re-zip so the zip carries the stapled app too.
+          rm -f "build/Markly-$VERSION.zip"
+          ditto -c -k --keepParent build/Markly.app "build/Markly-$VERSION.zip"
+
+      - name: Checksums
+        run: |
+          cd build
+          shasum -a 256 "Markly-$VERSION.dmg" "Markly-$VERSION.zip" > "Markly-$VERSION.sha256"
+          cat "Markly-$VERSION.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Markly-${{ env.VERSION }}
+          path: |
+            build/Markly-${{ env.VERSION }}.dmg
+            build/Markly-${{ env.VERSION }}.zip
+            build/Markly-${{ env.VERSION }}.sha256
+
+      - name: Publish GitHub release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$HAS_SIGNING" = "true" ]; then
+            INSTALL="Open the DMG and drag **Markly** to **Applications**."
+          else
+            INSTALL="Open the DMG and drag **Markly** to **Applications**.
+
+          This build is not notarised by Apple, so macOS blocks it the first time. Open Markly once, then go to **System Settings › Privacy & Security** and click **Open Anyway**. Or run:
+
+          \`\`\`bash
+          xattr -dr com.apple.quarantine /Applications/Markly.app
+          \`\`\`"
+          fi
+          cat > "$RUNNER_TEMP/notes.md" <<NOTES
+          ## Install
+
+          Requires macOS 26 (Tahoe) or later. Universal (Apple silicon and Intel).
+
+          $INSTALL
+          NOTES
+          gh release create "$GITHUB_REF_NAME" \
+            --title "Markly $VERSION" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            --generate-notes \
+            --verify-tag \
+            "build/Markly-$VERSION.dmg" "build/Markly-$VERSION.zip" "build/Markly-$VERSION.sha256"
+
+      - name: Clean up keychain
+        if: always() && env.HAS_SIGNING == 'true'
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true

@@ -41,6 +41,12 @@ Built with SwiftUI and AppKit (TextKit) and Apple's native **Liquid Glass** desi
 | Open note 1–9 | ⌘1–⌘9 | Editor settings | ⌥⌘I |
 | App settings | ⌘, | Filter notes | ⇧⌘L |
 
+## Download
+
+Grab the latest `Markly-x.y.z.dmg` from [Releases](https://github.com/muhghazaliakbar/markly/releases/latest), open it and drag **Markly** to **Applications**. Requires macOS 26 (Tahoe) or later; the app is universal (Apple silicon and Intel).
+
+If a release is not notarised, macOS blocks it the first time you open it. Go to **System Settings › Privacy & Security** and click **Open Anyway**, or run `xattr -dr com.apple.quarantine /Applications/Markly.app`.
+
 ## Getting the code
 
 ```bash
@@ -58,6 +64,8 @@ scripts/build-app.sh --install  # also copies it to /Applications
 ```
 
 For development, open `Package.swift` in Xcode and run the `Markly` scheme, or use `swift run`. Run the tests with `swift test`.
+
+CI (`.github/workflows/ci.yml`) builds and tests every push and pull request. Pushing a `vX.Y.Z` tag runs `.github/workflows/release.yml`, which builds the universal app, packages it with `scripts/make-dmg.sh` and publishes a GitHub release with the DMG, a zip and checksums.
 
 ## Project layout
 

@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - uses: actions/cache@v4
+        with:
+          path: .build
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: swift test
+
+      - name: No leftover debug code
+        run: |
+          if grep -rn "DEBUG-TEMP\|MARKLY_DEBUG" Sources/; then
+            echo "::error::Remove DEBUG-TEMP code before merging"
+            exit 1
+          fi
+
+      - name: Build app bundle
+        run: |
+          scripts/build-app.sh
+          lipo -archs build/Markly.app/Contents/MacOS/Markly
