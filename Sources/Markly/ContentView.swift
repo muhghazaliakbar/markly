@@ -17,6 +17,10 @@ struct ContentView: View {
     @State private var columns = NavigationSplitViewVisibility.all
     /// The panel's frame in window (global) coordinates, so clicks outside it can close it.
     @State private var panelFrame: CGRect = .zero
+    /// The panel stays mounted while it animates out, so closing plays the opening animation in reverse
+    /// (removal transitions can drop AppKit-backed views like the blur without animating them).
+    @State private var panelMounted = false
+    @State private var panelVisible = false
 
     private var style: EditorStyle {
         EditorStyle(font: font, fontSize: fontSize, lineSpacing: lineSpacing, maxWidth: editorWidth,
@@ -38,6 +42,25 @@ struct ContentView: View {
             }
         }
         .tint(accent.color)
+        .onAppear {
+            panelMounted = showPanel
+            panelVisible = showPanel
+        }
+        .onChange(of: showPanel) { _, show in
+            if show {
+                panelMounted = true
+                // Next turn, so the panel is laid out off-screen before it slides in.
+                DispatchQueue.main.async {
+                    withAnimation(GlassStyle.spring) { panelVisible = true }
+                }
+            } else {
+                withAnimation(GlassStyle.spring) {
+                    panelVisible = false
+                } completion: {
+                    if !showPanel { panelMounted = false }
+                }
+            }
+        }
         .onChange(of: workspace.focusMode) { _, on in
             withAnimation(GlassStyle.spring) { columns = on ? .detailOnly : .all }
         }
@@ -94,14 +117,15 @@ struct ContentView: View {
 
             // The panel floats above the editor and never changes its layout. Only the column right
             // behind it is frosted, so the rest of the page stays sharp and editable while you tweak it.
-            if showPanel {
+            if panelMounted {
                 InspectorPanel(git: git)
                     .frame(maxHeight: .infinity, alignment: .top)
                     .background(alignment: .trailing) { PanelFrost() }
                     .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { panelFrame = $0 }
-                .transition(.asymmetric(
-                    insertion: .move(edge: .trailing).combined(with: .opacity),
-                    removal: .move(edge: .trailing).combined(with: .opacity)))
+                    .offset(x: panelVisible ? 0 : 340)
+                    .opacity(panelVisible ? 1 : 0)
+                    .allowsHitTesting(panelVisible)
+                    .accessibilityHidden(!panelVisible)
             }
 
             if workspace.focusMode {
