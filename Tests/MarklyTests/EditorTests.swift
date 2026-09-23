@@ -219,4 +219,35 @@ final class EditorTests: XCTestCase {
         XCTAssertEqual(tv.string, "see docs here")
         XCTAssertEqual((tv.string as NSString).substring(with: tv.selectedRange()), "docs")
     }
+
+    /// The bar's clickable frame must match the bar and stay inside the editor, even near its right edge.
+    func testFormatBarFrameIsFullSizeAndInsideEditor() {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 700, height: 500),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        let tv = makeEditor(String(repeating: "word ", count: 30) + "edge")
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 700, height: 500))
+        scroll.documentView = tv
+        tv.frame = NSRect(x: 0, y: 0, width: 700, height: 500)
+        let container = EditorContainerView(scrollView: scroll)
+        container.frame = scroll.frame
+        window.contentView = container
+        window.makeFirstResponder(tv)
+        let toolbar = SelectionToolbarController(container: container, textView: tv)
+
+        // Select the last word of the first line, far to the right.
+        let firstLineEnd = tv.layoutManager!.characterRange(forGlyphRange: tv.layoutManager!.glyphRange(
+            forBoundingRect: NSRect(x: 0, y: 0, width: 700, height: 20), in: tv.textContainer!), actualGlyphRange: nil)
+        tv.setSelectedRange(NSRange(location: max(0, NSMaxRange(firstLineEnd) - 5), length: 4))
+        toolbar.selectionChanged()
+
+        let shown = expectation(description: "bar shown")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { shown.fulfill() }
+        wait(for: [shown], timeout: 2)
+
+        XCTAssertTrue(toolbar.model.visible)
+        let frame = toolbar.barFrame
+        XCTAssertGreaterThan(frame.width, 200, "clickable area covers the whole bar, not an empty 16 pt square")
+        XCTAssertGreaterThan(frame.height, 30)
+        XCTAssertTrue(container.bounds.contains(frame), "bar stays inside the editor: \(frame) in \(container.bounds)")
+    }
 }

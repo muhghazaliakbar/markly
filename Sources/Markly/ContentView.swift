@@ -102,6 +102,7 @@ struct ContentView: View {
                                        style: style, baseURL: url.deletingLastPathComponent(),
                                        revision: workspace.revision,
                                        documentID: url, animateSwitch: animateTransitions,
+                                       overlayTrailingInset: showPanel ? 312 : 0,
                                        onOpenLink: { workspace.followLink($0) })
                                 .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
                             if workspace.showPreview {

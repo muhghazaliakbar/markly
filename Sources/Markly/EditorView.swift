@@ -11,6 +11,8 @@ struct EditorView: NSViewRepresentable {
     /// (with a transition) instead of rebuilding the view, which is what used to make the text jump.
     var documentID: URL? = nil
     var animateSwitch: Bool = true
+    /// Width on the right covered by the floating editor panel (floating UI stays clear of it).
+    var overlayTrailingInset: CGFloat = 0
     var onOpenLink: (String) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -91,6 +93,7 @@ struct EditorView: NSViewRepresentable {
         coordinator.parent = self
         guard let textView = coordinator.textView else { return }
         textView.onOpenLink = { onOpenLink($0) }
+        coordinator.toolbar?.trailingInset = overlayTrailingInset
         if coordinator.style != style {
             coordinator.scheduleStyle(style)
         }

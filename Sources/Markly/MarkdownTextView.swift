@@ -313,6 +313,19 @@ final class MarkdownTextView: NSTextView {
 
     var onCancel: (() -> Bool)?
 
+    /// Reports whether a window point is over floating UI drawn above the text (the format bar).
+    var isOverOverlay: ((NSPoint) -> Bool)?
+
+    override func mouseMoved(with event: NSEvent) {
+        if isOverOverlay?(event.locationInWindow) == true { return }
+        super.mouseMoved(with: event)
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        if isOverOverlay?(event.locationInWindow) == true { return }
+        super.cursorUpdate(with: event)
+    }
+
     /// Esc first dismisses the format bar.
     override func cancelOperation(_ sender: Any?) {
         if onCancel?() == true { return }

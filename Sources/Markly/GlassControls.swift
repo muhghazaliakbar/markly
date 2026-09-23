@@ -11,6 +11,8 @@ enum GlassStyle {
     static var spring: Animation { reduceMotion ? .easeInOut(duration: 0.18) : .smooth(duration: 0.34) }
     /// Direct manipulation of controls: pills, tiles, chips.
     static var snappy: Animation { reduceMotion ? .easeInOut(duration: 0.12) : .snappy(duration: 0.24) }
+    /// Small transient UI that should feel instant, like the format bar popping in.
+    static var pop: Animation { reduceMotion ? .easeOut(duration: 0.1) : .snappy(duration: 0.18) }
     /// Content swaps such as switching notes.
     static var fade: Animation { .easeInOut(duration: reduceMotion ? 0.1 : 0.18) }
 
