@@ -33,7 +33,7 @@ struct ContentView: View {
                 WelcomeView()
             } else {
                 NavigationSplitView(columnVisibility: $columns) {
-                    SidebarView()
+                    SidebarView(git: git)
                         .navigationSplitViewColumnWidth(min: 200, ideal: 260, max: 420)
                         .background { BehindWindowBlur().ignoresSafeArea() }
                 } detail: {
@@ -118,7 +118,7 @@ struct ContentView: View {
             // The panel floats above the editor and never changes its layout. Only the column right
             // behind it is frosted, so the rest of the page stays sharp and editable while you tweak it.
             if panelMounted {
-                InspectorPanel(git: git)
+                EditorSettingsPanel()
                     .frame(maxHeight: .infinity, alignment: .top)
                     .background(alignment: .trailing) { PanelFrost() }
                     .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { panelFrame = $0 }
@@ -179,9 +179,9 @@ struct ContentView: View {
         ToolbarSpacer(.fixed, placement: .primaryAction)
         ToolbarItem(placement: .primaryAction) {
             Toggle(isOn: $workspace.showInspector.animation(GlassStyle.spring)) {
-                Label("Appearance", systemImage: "textformat.size")
+                Label("Editor Settings", systemImage: "textformat.size")
             }
-            .help("Appearance (⌘,)")
+            .help("Editor Settings (⌥⌘I)")
         }
     }
 }

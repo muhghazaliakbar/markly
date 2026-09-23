@@ -2,6 +2,8 @@ import SwiftUI
 
 struct SidebarView: View {
     @EnvironmentObject var workspace: Workspace
+    @ObservedObject var git: GitModel
+    @Environment(\.openSettings) private var openSettings
     @State private var query = ""
     @State private var renaming: FileNode?
     @State private var newName = ""
@@ -135,6 +137,8 @@ struct SidebarView: View {
             Button { workspace.showOpenFolderPanel() } label: {
                 Label("Add folder", systemImage: "folder.badge.plus")
                     .font(.system(size: 13, weight: .medium))
+                    .lineLimit(1)
+                    .fixedSize()
                     .padding(.horizontal, 12)
                     .frame(height: 32)
                     .contentShape(Capsule())
@@ -152,17 +156,15 @@ struct SidebarView: View {
             .glassEffect(.regular.interactive(), in: Circle())
             .help("Filter notes (⇧⌘L)")
 
-            Button {
-                withAnimation(GlassStyle.spring) { workspace.showInspector.toggle() }
-            } label: {
+            GitSidebarButton(git: git)
+
+            Button { openSettings() } label: {
                 Image(systemName: "gearshape")
-                    .symbolEffect(.rotate, value: workspace.showInspector)
                     .frame(width: 32, height: 32).contentShape(Circle())
             }
             .buttonStyle(.plain)
-            .glassEffect(workspace.showInspector ? .regular.tint(.accentColor).interactive() : .regular.interactive(), in: Circle())
-            .foregroundStyle(workspace.showInspector ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
-            .help("Appearance (⌘,)")
+            .glassEffect(.regular.interactive(), in: Circle())
+            .help("Settings (⌘,)")
         }
         .foregroundStyle(.secondary)
         .padding(.horizontal, 12)

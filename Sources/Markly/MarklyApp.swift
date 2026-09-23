@@ -40,6 +40,10 @@ struct MarklyApp: App {
         .defaultSize(width: 1240, height: 800)
         .windowToolbarStyle(.unified(showsTitle: false))
         .commands { MarklyCommands(workspace: workspace) }
+
+        Settings {
+            AppSettingsView()
+        }
     }
 }
 
@@ -65,10 +69,6 @@ struct MarklyCommands: Commands {
                 .keyboardShortcut("o")
             Button("Open File…") { workspace.showOpenFilePanel() }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
-        }
-        CommandGroup(replacing: .appSettings) {
-            Button("Appearance…") { withAnimation(GlassStyle.spring) { workspace.showInspector.toggle() } }
-                .keyboardShortcut(",")
         }
         CommandGroup(replacing: .saveItem) {
             Button("Save") { workspace.save() }
@@ -119,6 +119,8 @@ struct MarklyCommands: Commands {
                 .keyboardShortcut("p", modifiers: [.command, .option])
             Toggle("Focus Mode", isOn: $workspace.focusMode.animation(GlassStyle.spring))
                 .keyboardShortcut("f", modifiers: [.command, .shift])
+            Toggle("Editor Settings", isOn: $workspace.showInspector)
+                .keyboardShortcut("i", modifiers: [.command, .option])
             Divider()
             Button("Bigger Text") { fontSize = min(28, fontSize + 1) }.keyboardShortcut("+")
             Button("Smaller Text") { fontSize = max(11, fontSize - 1) }.keyboardShortcut("-")

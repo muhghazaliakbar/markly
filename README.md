@@ -9,9 +9,10 @@ Built with SwiftUI and AppKit (TextKit) and Apple's native **Liquid Glass** desi
 - **Live styling.** Headings, bold, italic, strikethrough, `==highlights==`, links, inline code, code blocks, quotes, tables, math and task lists render as you type.
 - **Syntax that gets out of the way.** Markers like `**` and `#` collapse on lines you aren't editing and reappear when the caret moves there. You can also choose to always show them, or never show them.
 - **Folders, not libraries.** Add as many folders as you like to the sidebar, browse nested notes, filter by name (⇧⌘L), and create, rename, reveal or trash files. Jump to the first nine notes with ⌘1–⌘9. Changes save automatically to the original file, and files edited elsewhere (git, other editors) reload on their own.
-- **Liquid Glass appearance panel** (⌘,). Switch theme, text size, image previews, typeface and syntax visibility, and set line spacing and editor width with tick sliders, all from a floating glass panel.
+- **Editor settings panel** (⌥⌘I or the Aa button). A floating Liquid Glass panel for everything that shapes the page you're writing: text size, typeface, inline image previews, syntax visibility, line spacing, editor width and spell checking. The page stays sharp and editable beside it, so changes show up immediately. A progressive blur sits only behind the panel.
+- **App settings** (⌘,). A standard Settings window for app-wide preferences: appearance (Light, Dark, Auto), accent color and word count, plus a list of keyboard shortcuts.
 - **Inline image previews.** An image on its own line is drawn right in the editor at small, medium or full width.
-- **Git sync.** See the branch and pending changes for the note's folder. One click commits everything, pulls (rebase) and pushes; you can also initialize a new repository.
+- **Git sync** from the sidebar. A button shows the branch and number of pending changes; its popover commits everything, pulls (rebase) and pushes in one click, or initializes a new repository.
 - **Clickable tasks.** Click `[ ]` to check it off. ⌘-click a link to open it; relative `.md` links open inside the editor.
 - **Smart lists.** Return continues a list (numbers go up, checkboxes reset), Return on an empty item ends it, and Tab / ⇧Tab indent.
 - **Preview pane** (⌥⌘P) with GitHub-style rendering, KaTeX math and syntax highlighting.
@@ -32,7 +33,8 @@ Built with SwiftUI and AppKit (TextKit) and Apple's native **Liquid Glass** desi
 | Code block | ⌥⌘C | Table | ⌥⌘T |
 | Preview | ⌥⌘P | Focus mode | ⇧⌘F |
 | Bigger / smaller text | ⌘+ / ⌘- | Add folder | ⌘O |
-| Open note 1–9 | ⌘1–⌘9 | Appearance panel | ⌘, |
+| Open note 1–9 | ⌘1–⌘9 | Editor settings | ⌥⌘I |
+| App settings | ⌘, | Filter notes | ⇧⌘L |
 
 ## Building
 
@@ -56,7 +58,9 @@ For development, open `Package.swift` in Xcode and run the `Markly` scheme, or u
 | `MarkdownHighlighter.swift` | Live Markdown styling and syntax hiding |
 | `MarkdownRenderer.swift` / `PreviewView.swift` | HTML rendering, preview pane, export and printing |
 | `GlassControls.swift` | Liquid Glass building blocks: segmented picker, tiles, tick slider, chips |
-| `InspectorPanel.swift` | Floating appearance panel, Git card, shortcuts sheet |
+| `EditorSettingsPanel.swift` | Floating editor settings panel |
+| `AppSettingsView.swift` | Settings window (General, Shortcuts) |
+| `GitViews.swift` | Sidebar Git button and sync card |
 | `GitService.swift` | Git status and sync through `/usr/bin/git` |
 | `ImageStore.swift` | Loads and caches inline image previews |
 | `SidebarView.swift`, `ContentView.swift` | Window layout and sidebar |
