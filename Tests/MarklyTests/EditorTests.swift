@@ -171,4 +171,32 @@ final class EditorTests: XCTestCase {
         tv.insertNewline(nil)
         XCTAssertEqual(tv.string, "- item\n")
     }
+
+    func testSwitchingDocumentsKeepsCaretAndUndoPerFile() {
+        let a = URL(fileURLWithPath: "/tmp/a.md"), b = URL(fileURLWithPath: "/tmp/b.md")
+        let view = EditorView(text: .constant("alpha text"), style: EditorStyle(), documentID: a)
+        let coordinator = view.makeCoordinator()
+        let tv = makeEditor("alpha text", select: NSRange(location: 3, length: 0))
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
+        scroll.documentView = tv
+        let container = EditorContainerView(scrollView: scroll)
+        container.frame = scroll.frame
+        tv.delegate = coordinator
+        coordinator.textView = tv
+        coordinator.documentID = a
+
+        coordinator.switchDocument(to: b, text: "bravo", animated: false)
+        XCTAssertEqual(tv.string, "bravo")
+        XCTAssertEqual(tv.selectedRange().location, 0, "a new file starts at the top")
+        tv.setSelectedRange(NSRange(location: 5, length: 0))
+
+        coordinator.switchDocument(to: a, text: "alpha text", animated: false)
+        XCTAssertEqual(tv.string, "alpha text")
+        XCTAssertEqual(tv.selectedRange().location, 3, "caret restored for file A")
+
+        let undoA = coordinator.undoManager(for: tv)
+        coordinator.switchDocument(to: b, text: "bravo", animated: false)
+        XCTAssertEqual(tv.selectedRange().location, 5, "caret restored for file B")
+        XCTAssertFalse(coordinator.undoManager(for: tv) === undoA, "each file has its own undo history")
+    }
 }

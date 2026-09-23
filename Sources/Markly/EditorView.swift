@@ -7,11 +7,15 @@ struct EditorView: NSViewRepresentable {
     var baseURL: URL?
     /// Bumped when the text is replaced from outside the editor.
     var revision: Int = 0
+    /// The open file. The editor view stays alive across files; changing this swaps its content in place
+    /// (with a transition) instead of rebuilding the view, which is what used to make the text jump.
+    var documentID: URL? = nil
+    var animateSwitch: Bool = true
     var onOpenLink: (String) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
-    func makeNSView(context: Context) -> NSScrollView {
+    func makeNSView(context: Context) -> EditorContainerView {
         let storage = NSTextStorage()
         let layout = MarkdownLayoutManager()
         // Lay out only what's on screen; keeps long notes fast to open, scroll and resize.
@@ -49,8 +53,10 @@ struct EditorView: NSViewRepresentable {
         scroll.drawsBackground = true
         scroll.backgroundColor = .textBackgroundColor
         scroll.contentView.postsBoundsChangedNotifications = false
+        let containerView = EditorContainerView(scrollView: scroll)
 
         let coordinator = context.coordinator
+        coordinator.documentID = documentID
         coordinator.textView = textView
         coordinator.highlighter.imageProvider = { [weak coordinator] src in
             ImageStore.shared.image(for: src, relativeTo: coordinator?.parent.baseURL)
@@ -65,10 +71,10 @@ struct EditorView: NSViewRepresentable {
         coordinator.rehighlight()
 
         DispatchQueue.main.async { textView.window?.makeFirstResponder(textView) }
-        return scroll
+        return containerView
     }
 
-    func updateNSView(_ scroll: NSScrollView, context: Context) {
+    func updateNSView(_ container: EditorContainerView, context: Context) {
         let coordinator = context.coordinator
         coordinator.parent = self
         guard let textView = coordinator.textView else { return }
@@ -76,7 +82,10 @@ struct EditorView: NSViewRepresentable {
         if coordinator.style != style {
             coordinator.scheduleStyle(style)
         }
-        if coordinator.revision != revision {
+        if coordinator.documentID != documentID {
+            coordinator.revision = revision
+            coordinator.switchDocument(to: documentID, text: text, animated: animateSwitch)
+        } else if coordinator.revision != revision {
             coordinator.revision = revision
             if textView.string != text {
                 let selection = textView.selectedRange()
@@ -99,7 +108,59 @@ struct EditorView: NSViewRepresentable {
         private var imageObserver: NSObjectProtocol?
         private var pendingWidthWork: DispatchWorkItem?
         var revision = 0
+        var documentID: URL?
         private var pendingStyle: EditorStyle?
+
+        /// Per-file caret, scroll position and undo history, so returning to a note is seamless.
+        private struct DocumentState { var selection: NSRange; var scroll: NSPoint }
+        private var states: [URL: DocumentState] = [:]
+        private var undoManagers: [URL: UndoManager] = [:]
+        private let scratchUndo = UndoManager()
+
+        func undoManager(for view: NSTextView) -> UndoManager? {
+            guard let id = documentID else { return scratchUndo }
+            if let existing = undoManagers[id] { return existing }
+            let manager = UndoManager()
+            undoManagers[id] = manager
+            return manager
+        }
+
+        // MARK: Switching files
+
+        func switchDocument(to id: URL?, text: String, animated: Bool) {
+            guard let tv = textView, let scroll = tv.enclosingScrollView,
+                  let container = scroll.superview as? EditorContainerView,
+                  let lm = tv.layoutManager, let tc = tv.textContainer else { return }
+            if let old = documentID {
+                states[old] = DocumentState(selection: tv.selectedRange(), scroll: scroll.contentView.bounds.origin)
+            }
+            let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            let snapshot = animated && container.window != nil ? container.snapshot() : nil
+
+            documentID = id
+            editedRange = nil
+            editTouchesBlocks = false
+            lastActive = nil
+            dimmedParagraph = nil
+
+            // Build the new page completely before anything is shown: text, styling, layout, position.
+            tv.string = text
+            let length = (text as NSString).length
+            let state = id.flatMap { states[$0] }
+            let sel = state?.selection ?? NSRange(location: 0, length: 0)
+            tv.setSelectedRange(NSRange(location: min(sel.location, length), length: min(sel.length, max(0, length - min(sel.location, length)))))
+            rehighlight()
+            var origin = state?.scroll ?? NSPoint(x: 0, y: -scroll.contentInsets.top)
+            let maxY = max(-scroll.contentInsets.top, tv.frame.height - scroll.contentView.bounds.height)
+            origin.y = min(max(origin.y, -scroll.contentInsets.top), maxY)
+            lm.ensureLayout(forBoundingRect: NSRect(origin: origin, size: scroll.contentView.bounds.size), in: tc)
+            scroll.contentView.scroll(to: origin)
+            scroll.reflectScrolledClipView(scroll.contentView)
+            container.layoutSubtreeIfNeeded()
+
+            guard let snapshot else { return }
+            container.play(from: snapshot, reduceMotion: reduceMotion)
+        }
         /// Lines touched by the edit in progress, and whether it added or removed fence markers.
         private var editedRange: NSRange?
         private var editTouchesBlocks = false
@@ -310,6 +371,82 @@ struct EditorView: NSViewRepresentable {
                 guard let self, let tv = self.textView, self.activeLines(tv) != self.lastActive else { return }
                 self.rehighlight(limits: [])
             }
+        }
+    }
+}
+
+/// Hosts the editor's scroll view and plays the page-swap transition: the old page (a snapshot) fades
+/// and lifts away while the new one settles in. Only layer animations run, so nothing re-lays out mid-flight.
+final class EditorContainerView: NSView {
+    let scrollView: NSScrollView
+    private var overlay: NSImageView?
+
+    init(scrollView: NSScrollView) {
+        self.scrollView = scrollView
+        super.init(frame: .zero)
+        wantsLayer = true
+        scrollView.frame = bounds
+        scrollView.autoresizingMask = [.width, .height]
+        scrollView.wantsLayer = true
+        addSubview(scrollView)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var isFlipped: Bool { true }
+
+    /// A picture of the page as it is now.
+    func snapshot() -> NSImage? {
+        overlay?.removeFromSuperview()
+        overlay = nil
+        guard bounds.width > 1, bounds.height > 1,
+              let rep = scrollView.bitmapImageRepForCachingDisplay(in: scrollView.bounds) else { return nil }
+        scrollView.cacheDisplay(in: scrollView.bounds, to: rep)
+        let image = NSImage(size: scrollView.bounds.size)
+        image.addRepresentation(rep)
+        return image
+    }
+
+    func play(from old: NSImage, reduceMotion: Bool) {
+        let cover = NSImageView(frame: scrollView.frame)
+        cover.image = old
+        cover.imageScaling = .scaleAxesIndependently
+        cover.wantsLayer = true
+        addSubview(cover, positioned: .above, relativeTo: scrollView)
+        overlay = cover
+        guard let coverLayer = cover.layer, let pageLayer = scrollView.layer else { return }
+
+        let duration: CFTimeInterval = reduceMotion ? 0.14 : 0.26
+        let curve = CAMediaTimingFunction(controlPoints: 0.2, 0.8, 0.2, 1)  // quick start, soft landing
+        let lift: CGFloat = reduceMotion ? 0 : 10
+
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { [weak self, weak cover] in
+            cover?.removeFromSuperview()
+            if self?.overlay === cover { self?.overlay = nil }
+        }
+        func animate(_ layer: CALayer, _ key: String, from: Any, to: Any, additive: Bool = false) {
+            let a = CABasicAnimation(keyPath: key)
+            a.fromValue = from
+            a.toValue = to
+            a.duration = duration
+            a.timingFunction = curve
+            a.isAdditive = additive
+            a.fillMode = .both
+            a.isRemovedOnCompletion = false
+            layer.add(a, forKey: "marklySwap." + key)
+        }
+        // Old page: fade out while drifting up a little.
+        animate(coverLayer, "opacity", from: 1, to: 0)
+        animate(coverLayer, "transform.translation.y", from: 0, to: -lift, additive: true)
+        // New page: fade in while settling up from just below.
+        animate(pageLayer, "opacity", from: 0, to: 1)
+        animate(pageLayer, "transform.translation.y", from: lift, to: 0, additive: true)
+        CATransaction.commit()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration + 0.05) { [weak pageLayer] in
+            pageLayer?.removeAnimation(forKey: "marklySwap.opacity")
+            pageLayer?.removeAnimation(forKey: "marklySwap.transform.translation.y")
         }
     }
 }

@@ -100,6 +100,7 @@ struct ContentView: View {
                             EditorView(text: Binding(get: { workspace.text }, set: { workspace.text = $0 }),
                                        style: style, baseURL: url.deletingLastPathComponent(),
                                        revision: workspace.revision,
+                                       documentID: url, animateSwitch: animateTransitions,
                                        onOpenLink: { workspace.followLink($0) })
                                 .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
                             if workspace.showPreview {
@@ -108,14 +109,14 @@ struct ContentView: View {
                                     .frame(minWidth: 280, maxWidth: .infinity, maxHeight: .infinity)
                             }
                         }
-                        .id(url)
                         .transition(.opacity)
                     } else {
                         EmptyEditor()
                             .transition(.opacity)
                     }
                 }
-                .animation(animateTransitions ? GlassStyle.fade : nil, value: workspace.currentURL)
+                // Only the empty state ↔ editor fades here; file-to-file swaps are animated by the editor itself.
+                .animation(GlassStyle.fade, value: workspace.currentURL == nil)
 
                 if showStatusBar && !workspace.focusMode && workspace.currentURL != nil {
                     StatusPill(live: workspace.live)
