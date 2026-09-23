@@ -35,6 +35,9 @@ struct ContentView: View {
             }
         }
         .tint(accent.color)
+        // Let the desktop show through wherever the window itself is visible (the sidebar).
+        // The editor paints its own opaque background on top.
+        .containerBackground(.ultraThinMaterial, for: .window)
         .onChange(of: workspace.focusMode) { _, on in
             withAnimation(GlassStyle.spring) { columns = on ? .detailOnly : .all }
         }
