@@ -2,9 +2,9 @@
 //   swift scripts/make-icon.swift            → writes the icon set
 //   swift scripts/make-icon.swift preview    → also writes previews to $TMPDIR at several sizes
 //
-// Design: the Markdown mark (a frame holding "M↓") redrawn in the macOS 26 icon style — a true superellipse
-// squircle with a deep blue→indigo gradient and soft light, and a white glyph built from rounded strokes so it
-// stays crisp down to 16 px.
+// Design: a tilted white page with a folded corner, carrying Markdown's heading mark "#", on a warm
+// coral→pink superellipse tile in the macOS 26 style. At 16 and 32 px the page is dropped and a bold white "#"
+// sits directly on the tile so it stays readable in the Finder sidebar and menus.
 import AppKit
 
 // MARK: Geometry
@@ -13,13 +13,11 @@ import AppKit
 func squircle(in rect: CGRect, exponent n: CGFloat = 5) -> CGPath {
     let path = CGMutablePath()
     let a = rect.width / 2, b = rect.height / 2, cx = rect.midX, cy = rect.midY
-    let steps = 720
-    for i in 0...steps {
-        let t = CGFloat(i) / CGFloat(steps) * 2 * .pi
+    for i in 0...720 {
+        let t = CGFloat(i) / 720 * 2 * .pi
         let c = cos(t), s = sin(t)
-        let x = cx + a * copysign(pow(abs(c), 2 / n), c)
-        let y = cy + b * copysign(pow(abs(s), 2 / n), s)
-        i == 0 ? path.move(to: CGPoint(x: x, y: y)) : path.addLine(to: CGPoint(x: x, y: y))
+        let p = CGPoint(x: cx + a * copysign(pow(abs(c), 2 / n), c), y: cy + b * copysign(pow(abs(s), 2 / n), s))
+        i == 0 ? path.move(to: p) : path.addLine(to: p)
     }
     path.closeSubpath()
     return path
@@ -30,96 +28,123 @@ func color(_ hex: UInt32, _ alpha: CGFloat = 1) -> CGColor {
             blue: CGFloat(hex & 0xff) / 255, alpha: alpha)
 }
 
-/// The M↓ glyph as stroked paths, centred in `rect`.
-func markGlyph(in rect: CGRect, stroke w: CGFloat) -> CGPath {
-    let path = CGMutablePath()
-    // M: two posts joined by a V that dips to 55% of the height.
-    let mW = rect.width * 0.54, h = rect.height
-    let x0 = rect.minX, y0 = rect.minY
-    path.move(to: CGPoint(x: x0, y: y0))
-    path.addLine(to: CGPoint(x: x0, y: y0 + h))
-    path.addLine(to: CGPoint(x: x0 + mW / 2, y: y0 + h * 0.45))
-    path.addLine(to: CGPoint(x: x0 + mW, y: y0 + h))
-    path.addLine(to: CGPoint(x: x0 + mW, y: y0))
-    // ↓: shaft plus chevron.
-    let ax = rect.maxX - rect.width * 0.14
-    path.move(to: CGPoint(x: ax, y: y0 + h))
-    path.addLine(to: CGPoint(x: ax, y: y0 + w * 0.2))
-    let arm = rect.width * 0.16
-    path.move(to: CGPoint(x: ax - arm, y: y0 + arm + w * 0.2))
-    path.addLine(to: CGPoint(x: ax, y: y0 + w * 0.2))
-    path.addLine(to: CGPoint(x: ax + arm, y: y0 + arm + w * 0.2))
-    return path.copy(strokingWithWidth: w, lineCap: .round, lineJoin: .round, miterLimit: 10)
+func gradient(_ colors: [(UInt32, CGFloat)], _ locations: [CGFloat]? = nil) -> CGGradient {
+    CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: colors.map { color($0.0, $0.1) } as CFArray,
+               locations: locations)!
+}
+
+/// A page with smooth corners and its top-right corner folded down by `fold`.
+func pagePath(_ r: CGRect, radius: CGFloat, fold: CGFloat) -> CGPath {
+    let p = CGMutablePath()
+    let k: CGFloat = 0.62  // control-point factor for a softer, near-continuous corner
+    p.move(to: CGPoint(x: r.minX + radius, y: r.minY))
+    p.addLine(to: CGPoint(x: r.maxX - radius, y: r.minY))
+    p.addCurve(to: CGPoint(x: r.maxX, y: r.minY + radius),
+               control1: CGPoint(x: r.maxX - radius * (1 - k), y: r.minY), control2: CGPoint(x: r.maxX, y: r.minY + radius * (1 - k)))
+    p.addLine(to: CGPoint(x: r.maxX, y: r.maxY - fold))
+    p.addLine(to: CGPoint(x: r.maxX - fold, y: r.maxY))
+    p.addLine(to: CGPoint(x: r.minX + radius, y: r.maxY))
+    p.addCurve(to: CGPoint(x: r.minX, y: r.maxY - radius),
+               control1: CGPoint(x: r.minX + radius * (1 - k), y: r.maxY), control2: CGPoint(x: r.minX, y: r.maxY - radius * (1 - k)))
+    p.addLine(to: CGPoint(x: r.minX, y: r.minY + radius))
+    p.addCurve(to: CGPoint(x: r.minX + radius, y: r.minY),
+               control1: CGPoint(x: r.minX, y: r.minY + radius * (1 - k)), control2: CGPoint(x: r.minX + radius * (1 - k), y: r.minY))
+    p.closeSubpath()
+    return p
+}
+
+/// "#" from four rounded bars; the verticals lean like a typeset hash.
+func hashPath(center c: CGPoint, length: CGFloat, gap: CGFloat, slant: CGFloat, weight: CGFloat) -> CGPath {
+    let p = CGMutablePath()
+    for dx in [-gap, gap] {
+        p.move(to: CGPoint(x: c.x + dx - slant, y: c.y - length / 2))
+        p.addLine(to: CGPoint(x: c.x + dx + slant, y: c.y + length / 2))
+    }
+    for dy in [-gap, gap] {
+        p.move(to: CGPoint(x: c.x - length / 2, y: c.y + dy))
+        p.addLine(to: CGPoint(x: c.x + length / 2, y: c.y + dy))
+    }
+    return p.copy(strokingWithWidth: weight, lineCap: .round, lineJoin: .round, miterLimit: 1)
+}
+
+func fill(_ ctx: CGContext, _ path: CGPath, _ g: CGGradient, from: CGPoint, to: CGPoint) {
+    ctx.saveGState()
+    ctx.addPath(path); ctx.clip()
+    ctx.drawLinearGradient(g, start: from, end: to, options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+    ctx.restoreGState()
+}
+
+func shadowed(_ ctx: CGContext, _ path: CGPath, offset: CGFloat, blur: CGFloat, _ shadow: CGColor) {
+    ctx.saveGState()
+    ctx.setShadow(offset: CGSize(width: 0, height: -offset), blur: blur, color: shadow)
+    ctx.addPath(path); ctx.setFillColor(color(0xFFFFFF)); ctx.fillPath()
+    ctx.restoreGState()
 }
 
 // MARK: Drawing
 
+let coral = gradient([(0xFFA15E, 1), (0xFF6A6A, 1), (0xE9357E, 1)], [0, 0.5, 1])
+let ink = gradient([(0xFF9148, 1), (0xF2366F, 1)])
+
 func render(size: Int) -> CGImage {
-    let s = CGFloat(size) / 1024
     let ctx = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0,
-                        space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-    ctx.scaleBy(x: s, y: s)
+                        space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    ctx.scaleBy(x: CGFloat(size) / 1024, y: CGFloat(size) / 1024)
     ctx.interpolationQuality = .high
 
-    // macOS icon grid: 824 pt body centred in 1024, with room for the drop shadow.
-    let body = CGRect(x: 100, y: 100, width: 824, height: 824)
-    let shape = squircle(in: body)
-
-    // Drop shadow under the whole tile.
+    // Tile on the macOS icon grid: 824 pt body centred in 1024, with room for the drop shadow.
+    let tile = squircle(in: CGRect(x: 100, y: 100, width: 824, height: 824))
     ctx.saveGState()
-    ctx.setShadow(offset: CGSize(width: 0, height: -12), blur: 28, color: color(0x000000, 0.28))
-    ctx.addPath(shape); ctx.setFillColor(color(0x2B3FD9)); ctx.fillPath()
+    ctx.setShadow(offset: CGSize(width: 0, height: -12), blur: 28, color: color(0x4A0A20, 0.30))
+    ctx.addPath(tile); ctx.setFillColor(color(0xE9357E)); ctx.fillPath()
+    ctx.restoreGState()
+    ctx.saveGState()
+    ctx.addPath(tile); ctx.clip()
+    ctx.drawLinearGradient(coral, start: CGPoint(x: 512, y: 924), end: CGPoint(x: 512, y: 100), options: [])
+    let glow = gradient([(0xFFFFFF, 0.30), (0xFFFFFF, 0)], [0, 1])
+    ctx.drawRadialGradient(glow, startCenter: CGPoint(x: 280, y: 880), startRadius: 0,
+                           endCenter: CGPoint(x: 280, y: 880), endRadius: 660, options: [])
+    ctx.addPath(tile); ctx.setLineWidth(6); ctx.replacePathWithStrokedPath(); ctx.clip()
+    ctx.drawLinearGradient(gradient([(0xFFFFFF, 0.6), (0xFFFFFF, 0)], [0, 1]),
+                           start: CGPoint(x: 512, y: 924), end: CGPoint(x: 512, y: 520), options: [])
     ctx.restoreGState()
 
-    // Background: deep blue → indigo, lit from the top left.
-    ctx.saveGState()
-    ctx.addPath(shape); ctx.clip()
-    let bg = CGGradient(colorsSpace: nil, colors: [color(0x4F8BFF), color(0x3457F2), color(0x3A2DBE)] as CFArray,
-                        locations: [0, 0.55, 1])!
-    ctx.drawLinearGradient(bg, start: CGPoint(x: 512, y: 924), end: CGPoint(x: 512, y: 100), options: [])
-    let glow = CGGradient(colorsSpace: nil, colors: [color(0xFFFFFF, 0.32), color(0xFFFFFF, 0)] as CFArray, locations: [0, 1])!
-    ctx.drawRadialGradient(glow, startCenter: CGPoint(x: 300, y: 860), startRadius: 0,
-                           endCenter: CGPoint(x: 300, y: 860), endRadius: 620, options: [])
-    // Glass rim: a thin bright edge along the top, fading down.
-    ctx.addPath(shape)
-    ctx.setLineWidth(6)
-    ctx.replacePathWithStrokedPath()
-    ctx.clip()
-    let rim = CGGradient(colorsSpace: nil, colors: [color(0xFFFFFF, 0.55), color(0xFFFFFF, 0.05)] as CFArray, locations: [0, 1])!
-    ctx.drawLinearGradient(rim, start: CGPoint(x: 512, y: 924), end: CGPoint(x: 512, y: 500), options: [])
-    ctx.restoreGState()
-
-    // Small sizes (16/32 px, Finder sidebar and menus) drop the frame and enlarge the glyph, as Apple's own
-    // icons do, so M↓ stays readable instead of blurring into the frame.
+    // Small sizes: a bold white "#" straight on the tile.
     if size <= 64 {
-        let glyph = markGlyph(in: CGRect(x: 250, y: 368, width: 524, height: 288), stroke: 104)
-        drawGlass(ctx, paths: [glyph])
+        let mark = hashPath(center: CGPoint(x: 512, y: 512), length: 470, gap: 108, slant: 50, weight: 110)
+        shadowed(ctx, mark, offset: 8, blur: 18, color(0x7A1030, 0.35))
+        fill(ctx, mark, gradient([(0xFFFFFF, 1), (0xFFE7EA, 1)]), from: CGPoint(x: 512, y: 760), to: CGPoint(x: 512, y: 270))
         return ctx.makeImage()!
     }
 
-    // The Markdown mark: a rounded frame around M↓.
-    let frame = CGRect(x: 212, y: 332, width: 600, height: 360)
-    let framePath = CGPath(roundedRect: frame, cornerWidth: 86, cornerHeight: 86, transform: nil)
-        .copy(strokingWithWidth: 40, lineCap: .round, lineJoin: .round, miterLimit: 10)
-    let glyph = markGlyph(in: CGRect(x: 302, y: 418, width: 420, height: 188), stroke: 54)
-    drawGlass(ctx, paths: [framePath, glyph])
-    return ctx.makeImage()!
-}
+    // The page, tilted slightly.
+    ctx.saveGState()
+    ctx.translateBy(x: 512, y: 512); ctx.rotate(by: -0.105); ctx.translateBy(x: -512, y: -512)
+    let rect = CGRect(x: 257, y: 206, width: 510, height: 612)
+    let fold: CGFloat = 138
+    let page = pagePath(rect, radius: 54, fold: fold)
+    shadowed(ctx, page, offset: 20, blur: 44, color(0x7A1030, 0.36))
+    fill(ctx, page, gradient([(0xFFFFFF, 1), (0xFFF4F2, 1)]), from: CGPoint(x: 512, y: rect.maxY), to: CGPoint(x: 512, y: rect.minY))
 
-/// White glass: soft shadow, top-lit gradient fill, and a fine highlight on the upper edge.
-func drawGlass(_ ctx: CGContext, paths: [CGPath]) {
-    let combined = CGMutablePath()
-    paths.forEach { combined.addPath($0) }
+    // Folded corner: the flap, with its own soft shadow cast onto the page.
+    let corner = CGPoint(x: rect.maxX - fold, y: rect.maxY - fold)
+    let flap = CGMutablePath()
+    flap.move(to: CGPoint(x: rect.maxX, y: rect.maxY - fold))
+    flap.addQuadCurve(to: CGPoint(x: corner.x + 26, y: corner.y + 26), control: CGPoint(x: corner.x + 70, y: corner.y + 8))
+    flap.addQuadCurve(to: CGPoint(x: rect.maxX - fold, y: rect.maxY), control: CGPoint(x: corner.x + 8, y: corner.y + 70))
+    flap.closeSubpath()
     ctx.saveGState()
-    ctx.setShadow(offset: CGSize(width: 0, height: -10), blur: 24, color: color(0x10124A, 0.35))
-    ctx.addPath(combined); ctx.setFillColor(color(0xFFFFFF)); ctx.fillPath()
+    ctx.addPath(page); ctx.clip()
+    ctx.setShadow(offset: CGSize(width: -6, height: -10), blur: 22, color: color(0x7A1030, 0.30))
+    ctx.addPath(flap); ctx.setFillColor(color(0xFFE0DA)); ctx.fillPath()
     ctx.restoreGState()
-    ctx.saveGState()
-    ctx.addPath(combined); ctx.clip()
-    let fill = CGGradient(colorsSpace: nil, colors: [color(0xFFFFFF), color(0xDCE4FF)] as CFArray, locations: [0, 1])!
-    ctx.drawLinearGradient(fill, start: CGPoint(x: 512, y: 700), end: CGPoint(x: 512, y: 320), options: [])
+    fill(ctx, flap, gradient([(0xFFE9E4, 1), (0xF8B7B1, 1)]), from: CGPoint(x: rect.maxX - 20, y: rect.maxY - 20), to: corner)
+
+    // "#", nudged away from the fold so it sits in the optical centre of the page.
+    let mark = hashPath(center: CGPoint(x: 500, y: 500), length: 318, gap: 74, slant: 36, weight: 60)
+    fill(ctx, mark, ink, from: CGPoint(x: 360, y: 660), to: CGPoint(x: 650, y: 340))
     ctx.restoreGState()
+    return ctx.makeImage()!
 }
 
 func png(_ image: CGImage) -> Data {
@@ -129,10 +154,9 @@ func png(_ image: CGImage) -> Data {
 // MARK: Output
 
 let fm = FileManager.default
-let args = CommandLine.arguments
-if args.contains("preview") {
+if CommandLine.arguments.contains("preview") {
     let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
-    for size in [1024, 128, 32, 16] {
+    for size in [1024, 128, 64, 32, 16] {
         try! png(render(size: size)).write(to: tmp.appendingPathComponent("icon-\(size).png"))
     }
     print("Previews in \(tmp.path)")
