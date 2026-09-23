@@ -126,10 +126,7 @@ struct TickSlider: View {
     let range: ClosedRange<Double>
     let step: Double
     var accent: Color
-    var onEditing: (Bool) -> Void = { _ in }
     var format: (Double) -> String
-
-    @State private var dragging = false
 
     private var count: Int { Int(((range.upperBound - range.lowerBound) / step).rounded()) + 1 }
     private var current: Int { Int(((min(max(value, range.lowerBound), range.upperBound) - range.lowerBound) / step).rounded()) }
@@ -159,17 +156,12 @@ struct TickSlider: View {
                 .gesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { g in
-                            if !dragging { dragging = true; onEditing(true) }
                             let i = min(max(Int((g.location.x / spacing).rounded()), 0), count - 1)
                             guard i != current else { return }
                             withAnimation(GlassStyle.snappy) {
                                 value = range.lowerBound + Double(i) * step
                             }
                             GlassStyle.tick()
-                        }
-                        .onEnded { _ in
-                            dragging = false
-                            onEditing(false)
                         }
                 )
             }
@@ -230,40 +222,3 @@ struct BehindWindowBlur: NSViewRepresentable {
     }
 }
 
-/// Animated Gaussian blur on an AppKit view's layer, rendered by Core Animation on the GPU.
-/// The filter is removed entirely when the radius returns to zero, so an unblurred view pays nothing.
-enum LayerBlur {
-    private static let key = "filters.markly.inputRadius"
-
-    static func set(_ radius: CGFloat, on view: NSView) {
-        view.wantsLayer = true
-        view.layerUsesCoreImageFilters = true
-        guard let layer = view.layer else { return }
-        let current = (layer.presentation()?.value(forKeyPath: key) as? CGFloat)
-            ?? (layer.value(forKeyPath: key) as? CGFloat) ?? 0
-        guard radius != current || (radius == 0 && layer.filters?.isEmpty == false) else { return }
-
-        if layer.filters?.isEmpty ?? true {
-            guard radius > 0, let blur = CIFilter(name: "CIGaussianBlur") else { return }
-            blur.name = "markly"
-            blur.setValue(0, forKey: kCIInputRadiusKey)
-            layer.filters = [blur]
-        }
-
-        let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        CATransaction.begin()
-        CATransaction.setCompletionBlock {
-            // Drop the filter once fully clear so text renders with normal font smoothing again.
-            if radius == 0, (layer.value(forKeyPath: key) as? CGFloat ?? 0) == 0 { layer.filters = nil }
-        }
-        let anim = CABasicAnimation(keyPath: key)
-        anim.fromValue = current
-        anim.toValue = radius
-        anim.duration = reduce ? 0.12 : 0.34
-        // Same feel as SwiftUI's .smooth spring: quick start, long gentle settle.
-        anim.timingFunction = CAMediaTimingFunction(controlPoints: 0.25, 0.1, 0.25, 1)
-        layer.setValue(radius, forKeyPath: key)
-        layer.add(anim, forKey: "marklyBlur")
-        CATransaction.commit()
-    }
-}

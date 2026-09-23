@@ -4,7 +4,6 @@ import SwiftUI
 struct InspectorPanel: View {
     @EnvironmentObject var workspace: Workspace
     @ObservedObject var git: GitModel
-    var onSliderEditing: (Bool) -> Void = { _ in }
 
     @AppStorage(Pref.font) private var font = FontChoice.sans
     @AppStorage(Pref.fontSize) private var fontSize = 16.0
@@ -36,13 +35,11 @@ struct InspectorPanel: View {
                         options: SyntaxVisibility.allCases.map { .init(value: $0, icon: $0.icon, label: $0.label, help: $0.help) },
                         selection: $syntax, accent: tint)
 
-                    TickSlider(title: "Line spacing", value: $lineSpacing, range: 1.0...2.2, step: 0.1, accent: tint,
-                               onEditing: onSliderEditing) {
+                    TickSlider(title: "Line spacing", value: $lineSpacing, range: 1.0...2.2, step: 0.1, accent: tint) {
                         String(format: "%.1f", $0)
                     }
 
-                    TickSlider(title: "Editor width", value: $editorWidth, range: 480...1360, step: 80, accent: tint,
-                               onEditing: onSliderEditing) {
+                    TickSlider(title: "Editor width", value: $editorWidth, range: 480...1360, step: 80, accent: tint) {
                         "\(Int(($0 - 480) / 880 * 60 + 40))%"
                     }
 

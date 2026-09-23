@@ -15,8 +15,6 @@ struct ContentView: View {
     @AppStorage(Pref.imagePreview) private var imagePreview = ImagePreview.medium
 
     @State private var columns = NavigationSplitViewVisibility.all
-    /// True while a slider in the panel is being dragged: the backdrop clears so the change is visible.
-    @State private var peeking = false
 
     private var style: EditorStyle {
         EditorStyle(font: font, fontSize: fontSize, lineSpacing: lineSpacing, maxWidth: editorWidth,
@@ -56,9 +54,7 @@ struct ContentView: View {
     }
 
     private var showPanel: Bool { workspace.showInspector && !workspace.focusMode }
-    /// Frosted, not erased: a light blur keeps the page's shape readable behind the panel.
-    /// Cleared while a slider is dragged so its effect is visible.
-    private var backdropBlur: CGFloat { showPanel && !peeking ? 8 : 0 }
+
 
     @ViewBuilder
     private var detail: some View {
@@ -70,11 +66,10 @@ struct ContentView: View {
                             EditorView(text: Binding(get: { workspace.text }, set: { workspace.text = $0 }),
                                        style: style, baseURL: url.deletingLastPathComponent(),
                                        revision: workspace.revision,
-                                       blurRadius: backdropBlur,
                                        onOpenLink: { workspace.followLink($0) })
                                 .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
                             if workspace.showPreview {
-                                LivePreview(live: workspace.live, fileURL: url, accent: accent.nsColor, blurRadius: backdropBlur)
+                                LivePreview(live: workspace.live, fileURL: url, accent: accent.nsColor)
                                     .frame(minWidth: 280, maxWidth: .infinity, maxHeight: .infinity)
                             }
                         }
@@ -95,18 +90,12 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // The panel floats above the editor and never changes its layout. Behind it, a blurred,
-            // slightly dimmed backdrop; clicking it (or pressing Esc) closes the panel.
+            // The panel floats above the editor and never changes its layout. Only the column right
+            // behind it is frosted, so the rest of the page stays sharp and editable while you tweak it.
             if showPanel {
-                PanelBackdrop(peeking: peeking) {
-                    withAnimation(GlassStyle.spring) { workspace.showInspector = false }
-                }
-                .transition(.opacity)
-
-                InspectorPanel(git: git, onSliderEditing: { editing in
-                    withAnimation(GlassStyle.snappy) { peeking = editing }
-                })
-                .frame(maxHeight: .infinity, alignment: .top)
+                InspectorPanel(git: git)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .background(alignment: .trailing) { PanelFrost() }
                 .transition(.asymmetric(
                     insertion: .move(edge: .trailing).combined(with: .opacity),
                     removal: .move(edge: .trailing).combined(with: .opacity)))
@@ -125,6 +114,7 @@ struct ContentView: View {
             }
         }
         .background(Color(nsColor: .textBackgroundColor))
+        .environment(\.workspaceClose) { withAnimation(GlassStyle.spring) { workspace.showInspector = false } }
         .navigationTitle(workspace.currentURL?.deletingPathExtension().lastPathComponent ?? "Markly")
         .toolbar { toolbar }
         .toolbar(workspace.focusMode ? .hidden : .visible, for: .windowToolbar)
@@ -163,23 +153,35 @@ struct ContentView: View {
     }
 }
 
-/// Frosted layer over the editor while the appearance panel is open.
-struct PanelBackdrop: View {
-    var peeking: Bool
-    var close: () -> Void
-    @Environment(\.colorScheme) private var scheme
+/// Frosted glass behind the appearance panel only. The left edge feathers out so it reads as depth,
+/// not as a hard slab. Esc closes the panel.
+struct PanelFrost: View {
+    @Environment(\.workspaceClose) private var close
 
     var body: some View {
-        Color.black
-            .opacity(peeking ? 0 : (scheme == .dark ? 0.22 : 0.08))
-            .ignoresSafeArea()
-            .contentShape(Rectangle())
-            .onTapGesture(perform: close)
-            .background {
-                Button("", action: close).keyboardShortcut(.cancelAction).hidden()
+        Rectangle()
+            .fill(.ultraThinMaterial)
+            .mask {
+                LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.14)],
+                               startPoint: .leading, endPoint: .trailing)
             }
-            .accessibilityLabel("Close appearance panel")
-            .accessibilityAddTraits(.isButton)
+            .padding(.leading, -36)
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+            .background {
+                Button("") { close() }.keyboardShortcut(.cancelAction).hidden()
+            }
+    }
+}
+
+private struct WorkspaceCloseKey: EnvironmentKey {
+    static let defaultValue: () -> Void = {}
+}
+
+extension EnvironmentValues {
+    var workspaceClose: () -> Void {
+        get { self[WorkspaceCloseKey.self] }
+        set { self[WorkspaceCloseKey.self] = newValue }
     }
 }
 
@@ -188,10 +190,9 @@ struct LivePreview: View {
     @ObservedObject var live: LiveDocument
     var fileURL: URL
     var accent: NSColor
-    var blurRadius: CGFloat = 0
 
     var body: some View {
-        PreviewView(markdown: live.text, fileURL: fileURL, accent: accent, blurRadius: blurRadius)
+        PreviewView(markdown: live.text, fileURL: fileURL, accent: accent)
     }
 }
 
