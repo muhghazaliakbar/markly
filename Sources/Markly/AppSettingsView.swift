@@ -40,7 +40,8 @@ struct SettingRow<Control: View>: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            Spacer(minLength: 12)
+            // Text takes all the room the control doesn't need, so details wrap at the control, not midway.
+            .frame(maxWidth: .infinity, alignment: .leading)
             control()
         }
         .padding(.vertical, 2)
@@ -386,18 +387,25 @@ private struct AboutSettings: View {
     var body: some View {
         Form {
             Section {
-                HStack(spacing: 16) {
+                VStack(spacing: 4) {
                     Image(nsImage: NSApp.applicationIconImage)
                         .resizable()
-                        .frame(width: 64, height: 64)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Markly").font(.system(size: 22, weight: .regular, design: .serif))
-                        Text(version).foregroundStyle(.secondary)
-                        Text("Free and open source under the MIT License.")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
+                        .frame(width: 72, height: 72)
+                    Text("Markly").font(.system(size: 26, weight: .regular, design: .serif))
+                    Text(version).font(.callout).foregroundStyle(.secondary)
+                    Text("Free and open source under the MIT License.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: 4) {
+                        Text("Made by")
+                        Link("Muh Ghazali Akbar", destination: URL(string: "https://justghali.dev")!)
+                            .pointerStyle(.link)
                     }
+                    .font(.callout)
+                    .padding(.top, 6)
+                    BuyMeACoffeeButton().padding(.top, 6)
                 }
+                .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
             }
 
@@ -456,6 +464,24 @@ private struct AboutSettings: View {
             .map { "\($0)=\(UserDefaults.standard.object(forKey: $0).map { "\($0)" } ?? "default")" }
             .joined(separator: ", ")
         return "Markly \(version)\nmacOS \(os) · \(arch)\nSettings: \(prefs)"
+    }
+}
+
+/// Buy Me a Coffee's yellow button, drawn natively so Settings loads nothing from the network.
+private struct BuyMeACoffeeButton: View {
+    var body: some View {
+        Link(destination: URL(string: "https://www.buymeacoffee.com/justghali.dev")!) {
+            Label("Buy me a coffee", systemImage: "cup.and.saucer.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.black)
+                .padding(.horizontal, 16)
+                .frame(height: 36)
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color(red: 1, green: 0.867, blue: 0)))
+                .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.link)
+        .help("buymeacoffee.com/justghali.dev")
     }
 }
 
