@@ -123,4 +123,26 @@ final class EditorTests: XCTestCase {
             }
         }
     }
+
+    func testClickOutsidePanelCloses() {
+        // 1000×600 window with a toolbar; detail pane from x=260; panel is the right-most 312 pt.
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 600),
+                              styleMask: [.titled, .fullSizeContentView], backing: .buffered, defer: true)
+        window.toolbar = NSToolbar()
+        let content = NSView(frame: NSRect(x: 0, y: 0, width: 1000, height: 600))
+        window.contentView = content
+        let monitor = ClickMonitorView(frame: NSRect(x: 260, y: 0, width: 740, height: 600))
+        content.addSubview(monitor)
+        monitor.isActive = true
+        monitor.excluded = CGRect(x: 688, y: 0, width: 312, height: 600)  // SwiftUI global, top-left origin
+        let midY = window.contentLayoutRect.midY
+
+        XCTAssertTrue(monitor.shouldClose(forClickAt: NSPoint(x: 500, y: midY)), "click in the editor")
+        XCTAssertFalse(monitor.shouldClose(forClickAt: NSPoint(x: 800, y: midY)), "click inside the panel")
+        XCTAssertFalse(monitor.shouldClose(forClickAt: NSPoint(x: 100, y: midY)), "click in the file sidebar")
+        XCTAssertFalse(monitor.shouldClose(forClickAt: NSPoint(x: 500, y: window.contentLayoutRect.maxY + 5)),
+                       "click in the toolbar")
+        monitor.isActive = false
+        XCTAssertFalse(monitor.shouldClose(forClickAt: NSPoint(x: 500, y: midY)), "panel already closed")
+    }
 }

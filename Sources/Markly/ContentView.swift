@@ -15,6 +15,8 @@ struct ContentView: View {
     @AppStorage(Pref.imagePreview) private var imagePreview = ImagePreview.medium
 
     @State private var columns = NavigationSplitViewVisibility.all
+    /// The panel's frame in window (global) coordinates, so clicks outside it can close it.
+    @State private var panelFrame: CGRect = .zero
 
     private var style: EditorStyle {
         EditorStyle(font: font, fontSize: fontSize, lineSpacing: lineSpacing, maxWidth: editorWidth,
@@ -96,6 +98,7 @@ struct ContentView: View {
                 InspectorPanel(git: git)
                     .frame(maxHeight: .infinity, alignment: .top)
                     .background(alignment: .trailing) { PanelFrost() }
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { panelFrame = $0 }
                 .transition(.asymmetric(
                     insertion: .move(edge: .trailing).combined(with: .opacity),
                     removal: .move(edge: .trailing).combined(with: .opacity)))
@@ -111,6 +114,12 @@ struct ContentView: View {
                 .padding(16)
                 .help("Exit Focus Mode (⇧⌘F)")
                 .transition(.scale(scale: 0.6).combined(with: .opacity))
+            }
+        }
+        .background {
+            // Clicking the editor or preview outside the panel closes it; the click still reaches the editor.
+            ClickOutsideToClose(isActive: showPanel, excluded: panelFrame) {
+                withAnimation(GlassStyle.spring) { workspace.showInspector = false }
             }
         }
         .background(Color(nsColor: .textBackgroundColor))
@@ -153,20 +162,73 @@ struct ContentView: View {
     }
 }
 
-/// Progressive blur behind the appearance panel: strongest at the window's right edge, fading to clear
-/// past the panel's left edge, so the page dissolves under the panel instead of meeting a slab.
-/// Esc closes the panel.
+/// Progressive blur behind the appearance panel, exactly as wide as the panel: strongest at the window's
+/// right edge, fading to clear at the panel's left edge. Esc closes the panel.
 struct PanelFrost: View {
     @Environment(\.workspaceClose) private var close
 
     var body: some View {
         ProgressiveBlur(radius: 18)
-            .padding(.leading, -96)
             .ignoresSafeArea()
             .allowsHitTesting(false)
             .background {
                 Button("") { close() }.keyboardShortcut(.cancelAction).hidden()
             }
+    }
+}
+
+/// Watches left clicks in the window without consuming them. Fires `onClose` for clicks inside this view's
+/// area (the detail pane) that land outside `excluded` and below the toolbar.
+struct ClickOutsideToClose: NSViewRepresentable {
+    var isActive: Bool
+    var excluded: CGRect
+    var onClose: () -> Void
+
+    func makeNSView(context: Context) -> ClickMonitorView { ClickMonitorView() }
+
+    func updateNSView(_ view: ClickMonitorView, context: Context) {
+        view.isActive = isActive
+        view.excluded = excluded
+        view.onClose = onClose
+    }
+}
+
+final class ClickMonitorView: NSView {
+    var isActive = false
+    var excluded: CGRect = .zero
+    var onClose: () -> Void = {}
+    private var monitor: Any?
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    deinit {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
+        guard window != nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+            self?.handle(event)
+            return event  // never swallow the click
+        }
+    }
+
+    private func handle(_ event: NSEvent) {
+        guard let window, event.window === window, shouldClose(forClickAt: event.locationInWindow) else { return }
+        let close = onClose
+        DispatchQueue.main.async { close() }
+    }
+
+    /// - Parameter p: click location in window coordinates (bottom-left origin).
+    func shouldClose(forClickAt p: NSPoint) -> Bool {
+        guard isActive, let window else { return false }
+        // Ignore the titlebar/toolbar (the panel's own toggle lives there) and the file sidebar.
+        guard window.contentLayoutRect.contains(p), bounds.contains(convert(p, from: nil)) else { return false }
+        // SwiftUI's global space is top-left origin in the window's content view.
+        let height = window.contentView?.bounds.height ?? window.frame.height
+        return !excluded.contains(CGPoint(x: p.x, y: height - p.y))
     }
 }
 
