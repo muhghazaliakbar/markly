@@ -71,6 +71,9 @@ struct InspectorPanel: View {
             }
         }
         .scrollIndicators(.never)
+        // The cards are glass already; the toolbar's scroll-edge backing would paint a mismatched
+        // rectangle above the panel.
+        .scrollEdgeEffectHidden(true, for: .top)
         .frame(width: 312)
         .onChange(of: theme) { _, t in t.apply() }
         .sheet(isPresented: $showShortcuts) { ShortcutsSheet() }
