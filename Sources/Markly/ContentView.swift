@@ -103,10 +103,11 @@ struct ContentView: View {
                                        revision: workspace.revision,
                                        documentID: url, animateSwitch: animateTransitions,
                                        overlayTrailingInset: showPanel ? 312 : 0,
+                                       scrollSync: workspace.scrollSync,
                                        onOpenLink: { workspace.followLink($0) })
                                 .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
                             if workspace.showPreview {
-                                LivePreview(live: workspace.live, fileURL: url, accent: accent.nsColor,
+                                LivePreview(live: workspace.live, fileURL: url, accent: accent.nsColor, scrollSync: workspace.scrollSync,
                                             privacyKey: "\(previewNetwork)\(remoteImages)\(accentCustom)")
                                     .frame(minWidth: 280, maxWidth: .infinity, maxHeight: .infinity)
                             }
@@ -285,12 +286,13 @@ struct LivePreview: View {
     @ObservedObject var live: LiveDocument
     var fileURL: URL
     var accent: NSColor
+    var scrollSync: ScrollSync?
     /// Reloads the page when privacy settings (or a custom accent) change.
     var privacyKey: String = ""
 
     var body: some View {
         PreviewView(markdown: live.text, fileURL: fileURL, accent: accent, reloadKey: privacyKey,
-                    animateSwitch: Pref.bool(Pref.animateTransitions, default: true))
+                    animateSwitch: Pref.bool(Pref.animateTransitions, default: true), scrollSync: scrollSync)
     }
 }
 

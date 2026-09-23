@@ -13,6 +13,8 @@ struct EditorView: NSViewRepresentable {
     var animateSwitch: Bool = true
     /// Width on the right covered by the floating editor panel (floating UI stays clear of it).
     var overlayTrailingInset: CGFloat = 0
+    /// Where the editor reports its reading position for the preview to follow.
+    var scrollSync: ScrollSync? = nil
     var onOpenLink: (String) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -67,8 +69,11 @@ struct EditorView: NSViewRepresentable {
         }
         coordinator.scrollObserver = NotificationCenter.default.addObserver(
             forName: NSView.boundsDidChangeNotification, object: scroll.contentView, queue: .main
-        ) { [weak toolbar] _ in
-            MainActor.assumeIsolated { toolbar?.reposition() }
+        ) { [weak toolbar, weak coordinator] _ in
+            MainActor.assumeIsolated {
+                toolbar?.reposition()
+                coordinator?.reportPosition(smooth: false)
+            }
         }
         coordinator.documentID = documentID
         coordinator.textView = textView
@@ -94,6 +99,7 @@ struct EditorView: NSViewRepresentable {
         guard let textView = coordinator.textView else { return }
         textView.onOpenLink = { onOpenLink($0) }
         coordinator.toolbar?.trailingInset = overlayTrailingInset
+        coordinator.scrollSync = scrollSync
         if coordinator.style != style {
             coordinator.scheduleStyle(style)
         }
@@ -127,6 +133,68 @@ struct EditorView: NSViewRepresentable {
         var documentID: URL?
         var toolbar: SelectionToolbarController?
         var scrollObserver: NSObjectProtocol?
+        weak var scrollSync: ScrollSync?
+
+        // MARK: Preview scroll sync
+
+        /// UTF-16 offsets where each line starts; rebuilt lazily after edits.
+        private var lineStarts: [Int] = [0]
+        private var lineStartsValid = false
+        private var lastReportedLine = -1
+
+        private func lineIndex(at location: Int) -> Int {
+            if !lineStartsValid, let tv = textView {
+                let ns = tv.string as NSString
+                var starts = [0]
+                var range = NSRange(location: 0, length: ns.length)
+                while true {
+                    let r = ns.range(of: "\n", options: .literal, range: range)
+                    if r.location == NSNotFound { break }
+                    starts.append(NSMaxRange(r))
+                    range = NSRange(location: NSMaxRange(r), length: ns.length - NSMaxRange(r))
+                }
+                lineStarts = starts
+                lineStartsValid = true
+            }
+            var lo = 0, hi = lineStarts.count - 1
+            while lo < hi {
+                let mid = (lo + hi + 1) / 2
+                if lineStarts[mid] <= location { lo = mid } else { hi = mid - 1 }
+            }
+            return lo
+        }
+
+        /// Tells the preview which source line to show, and where in the viewport it sits. Follows the caret
+        /// while it's on screen (so you see the result of the line you're editing), else the top visible line.
+        /// `smooth: nil` glides only when the line jumps by more than one (a click elsewhere, ⌘↓…).
+        func reportPosition(smooth: Bool?) {
+            guard let sync = scrollSync, sync.isEnabled, let tv = textView,
+                  let lm = tv.layoutManager, let tc = tv.textContainer else { return }
+            let visible = tv.visibleRect
+            guard visible.height > 1 else { return }
+            let origin = tv.textContainerOrigin
+            let ns = tv.string as NSString
+            var location: Int
+            var y: CGFloat
+            let caret = tv.selectedRange().location
+            var caretRect = NSRect.zero
+            if ns.length > 0 {
+                let glyph = lm.glyphIndexForCharacter(at: min(caret, ns.length - 1))
+                caretRect = lm.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil).offsetBy(dx: origin.x, dy: origin.y)
+            }
+            if tv.window?.firstResponder === tv, visible.intersects(caretRect) {
+                location = caret
+                y = caretRect.minY
+            } else {
+                let point = NSPoint(x: 0, y: max(0, visible.minY - origin.y))
+                location = ns.length == 0 ? 0 : lm.characterIndexForGlyph(at: lm.glyphIndex(for: point, in: tc))
+                y = visible.minY
+            }
+            let line = lineIndex(at: location) + 1
+            let glide = smooth ?? (lastReportedLine >= 0 && abs(line - lastReportedLine) > 1)
+            lastReportedLine = line
+            sync.editorMoved(line: line, ratio: Double((y - visible.minY) / visible.height), smooth: glide)
+        }
         private var pendingStyle: EditorStyle?
 
         /// Per-file caret, scroll position and undo history, so returning to a note is seamless.
@@ -164,6 +232,7 @@ struct EditorView: NSViewRepresentable {
 
             // Build the new page completely before anything is shown: text, styling, layout, position.
             tv.string = text
+            lineStartsValid = false
             let length = (text as NSString).length
             let state = id.flatMap { states[$0] }
             let sel = state?.selection ?? NSRange(location: 0, length: 0)
@@ -361,6 +430,7 @@ struct EditorView: NSViewRepresentable {
 
         func textDidChange(_ notification: Notification) {
             guard let tv = textView else { return }
+            lineStartsValid = false
             let ns = tv.string as NSString
             defer { editedRange = nil; editTouchesBlocks = false }
             if let edit = editedRange, !editTouchesBlocks, NSMaxRange(edit) <= ns.length {
@@ -380,6 +450,7 @@ struct EditorView: NSViewRepresentable {
         func textViewDidChangeSelection(_ notification: Notification) {
             guard !highlighting else { return }
             toolbar?.selectionChanged()
+            reportPosition(smooth: nil)
             if style.focusParagraph { updateFocusDim() }
             if style.typewriter {
                 // After the edit has been laid out.

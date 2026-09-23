@@ -291,4 +291,87 @@ final class EditorTests: XCTestCase {
         XCTAssertEqual(try eval("document.querySelector('base').href") as? String, "file:///tmp/")
         withExtendedLifetime(nav) {}
     }
+
+    func testRendererAnnotatesBlocksWithSourceLines() {
+        let html = MarkdownRenderer.html(from: "# Title\n\nFirst paragraph\nstill first\n\n- a\n- b\n")
+        XCTAssertTrue(html.contains(#"<h1 data-line="1" data-end="1">"#), html)
+        XCTAssertTrue(html.contains(#"<p data-line="3" data-end="4">"#), html)
+        XCTAssertTrue(html.contains(#"<ul data-line="6" data-end="7">"#), html)
+    }
+
+    /// Runs the preview's scroll-sync script on a long page: a later line must scroll further down.
+    func testPreviewScrollsToSourceLine() throws {
+        UserDefaults.standard.set(false, forKey: Pref.previewNetwork)
+        defer { UserDefaults.standard.removeObject(forKey: Pref.previewNetwork) }
+        let markdown = (1...80).map { "Paragraph \($0) with enough words to take up a line in the preview." }.joined(separator: "\n\n")
+        let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
+        let loaded = expectation(description: "loaded")
+        final class Nav: NSObject, WKNavigationDelegate {
+            let done: () -> Void
+            init(_ done: @escaping () -> Void) { self.done = done }
+            func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { done() }
+        }
+        let nav = Nav { loaded.fulfill() }
+        web.navigationDelegate = nav
+        web.loadHTMLString(MarkdownRenderer.page(title: "A", body: MarkdownRenderer.html(from: markdown), baseURL: nil, accentHex: "#0a84ff"), baseURL: nil)
+        wait(for: [loaded], timeout: 10)
+        func eval(_ js: String) throws -> Any? {
+            var result: Any?, failure: Error?
+            let done = expectation(description: js)
+            web.evaluateJavaScript(js) { r, e in result = r; failure = e; done.fulfill() }
+            wait(for: [done], timeout: 5)
+            if let failure { throw failure }
+            return result
+        }
+        _ = try eval("__syncLine(81, 0, false)")        // paragraph 41 (line 81) at the top
+        let middle = try XCTUnwrap(eval("window.scrollY") as? Double)
+        _ = try eval("__syncLine(141, 0, false)")       // paragraph 71
+        let later = try XCTUnwrap(eval("window.scrollY") as? Double)
+        _ = try eval("__syncLine(1, 0, false)")
+        let top = try XCTUnwrap(eval("window.scrollY") as? Double)
+        XCTAssertGreaterThan(middle, 0)
+        XCTAssertGreaterThan(later, middle)
+        XCTAssertEqual(top, 0)
+        // The block for line 81 is at the top of the viewport.
+        let offset = try XCTUnwrap(eval("document.querySelector('[data-line=\"81\"]').getBoundingClientRect().top") as? Double)
+        _ = try eval("__syncLine(81, 0, false)")
+        let frame = expectation(description: "scroll applied")  // WebKit applies the scroll on the next frame
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { frame.fulfill() }
+        wait(for: [frame], timeout: 2)
+        let aligned = try XCTUnwrap(eval("document.querySelector('[data-line=\"81\"]').getBoundingClientRect().top") as? Double)
+        XCTAssertEqual(aligned, 0, accuracy: 1.5, "was \(offset) before syncing")
+        withExtendedLifetime(nav) {}
+    }
+
+    /// Scrolled to the middle of a note, the editor reports the line at the top of the viewport.
+    func testEditorReportsTopVisibleLine() {
+        let text = (1...200).map { "Line \($0)" }.joined(separator: "\n")
+        let view = EditorView(text: .constant(text), style: EditorStyle())
+        let coordinator = view.makeCoordinator()
+        let tv = makeEditor(text, select: NSRange(location: 0, length: 0))
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
+        scroll.documentView = tv
+        tv.frame.size.width = 600
+        tv.sizeToFit()
+        coordinator.textView = tv
+        let sync = ScrollSync()
+        coordinator.scrollSync = sync
+        var reported: Int?
+        sync.toPreview = { line, _, _ in reported = line }
+
+        // Line height of the first line tells us where line 101 starts.
+        let lm = tv.layoutManager!
+        let lineHeight = lm.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil).height
+        let targetY = tv.textContainerOrigin.y + lineHeight * 100
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: targetY))
+        scroll.reflectScrolledClipView(scroll.contentView)
+
+        coordinator.reportPosition(smooth: false)
+        let flushed = expectation(description: "flushed")
+        DispatchQueue.main.async { flushed.fulfill() }
+        wait(for: [flushed], timeout: 1)
+        let line = try? XCTUnwrap(reported)
+        XCTAssertNotNil(line)
+        XCTAssertEqual(Double(line ?? 0), 101, accuracy: 1, "caret is off screen, so the top visible line is reported")
+    }
 }

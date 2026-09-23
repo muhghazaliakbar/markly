@@ -96,6 +96,7 @@ final class Workspace: ObservableObject {
     }
     @Published private(set) var revision = 0
     let live = LiveDocument()
+    let scrollSync = ScrollSync()
     @Published private(set) var isDirty = false
     @Published var showPreview = UserDefaults.standard.bool(forKey: "showPreview") {
         didSet { defaults.set(showPreview, forKey: "showPreview") }

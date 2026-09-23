@@ -17,6 +17,7 @@ struct PreviewView: NSViewRepresentable {
     var accent: NSColor
     var reloadKey: String = ""
     var animateSwitch: Bool = true
+    var scrollSync: ScrollSync? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -29,11 +30,18 @@ struct PreviewView: NSViewRepresentable {
     }
 
     func updateNSView(_ web: WKWebView, context: Context) {
+        if let sync = scrollSync, context.coordinator.sync !== sync {
+            context.coordinator.sync = sync
+            sync.toPreview = { [weak web] line, ratio, smooth in
+                web?.evaluateJavaScript("__syncLine(\(line), \(ratio), \(smooth))")
+            }
+        }
         context.coordinator.schedule(web: web, markdown: markdown, fileURL: fileURL, accent: accent.hexString + reloadKey,
                                      animate: animateSwitch)
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate {
+        weak var sync: ScrollSync?
         private var loadedKey: String?
         private var loadedPath: String?
         private var ready = false
@@ -90,12 +98,13 @@ struct PreviewView: NSViewRepresentable {
 
         private func push(_ body: String, to web: WKWebView) {
             guard let data = try? JSONEncoder().encode(body), let json = String(data: data, encoding: .utf8) else { return }
-            web.evaluateJavaScript("__update(\(json))")
+            // Re-render keeps the reading position locked to the editor.
+            web.evaluateJavaScript("__update(\(json))") { [weak self] _, _ in self?.sync?.resync() }
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             ready = true
-            if let p = pending { pending = nil; push(p, to: webView) }
+            if let p = pending { pending = nil; push(p, to: webView) } else { sync?.resync() }
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.22
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)

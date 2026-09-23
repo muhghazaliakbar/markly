@@ -241,6 +241,7 @@ private struct AccentSwatch: View {
 private struct EditorBehaviorSettings: View {
     @AppStorage(Pref.smartLists) private var smartLists = true
     @AppStorage(Pref.selectionToolbar) private var selectionToolbar = true
+    @AppStorage(Pref.syncPreview) private var syncPreview = true
     @AppStorage(Pref.typewriter) private var typewriter = false
     @AppStorage(Pref.focusParagraph) private var focusParagraph = false
     @AppStorage(Pref.animateTransitions) private var animateTransitions = true
@@ -268,6 +269,10 @@ private struct EditorBehaviorSettings: View {
                 SettingRow(icon: "text.line.first.and.arrowtriangle.forward", color: .purple, title: "Focus on paragraph",
                            detail: "Dim everything except the paragraph you're working on.") {
                     Toggle("", isOn: $focusParagraph).labelsHidden().toggleStyle(.switch)
+                }
+                SettingRow(icon: "arrow.up.and.down.text.horizontal", color: .green, title: "Sync preview scrolling",
+                           detail: "The preview follows the line you're editing, or the part of the note you're reading.") {
+                    Toggle("", isOn: $syncPreview).labelsHidden().toggleStyle(.switch)
                 }
                 SettingRow(icon: "rectangle.2.swap", color: .pink, title: "Animate note transitions",
                            detail: "Cross-fade the editor when switching between notes.") {

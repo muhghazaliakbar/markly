@@ -2,10 +2,27 @@ import Foundation
 import Markdown
 
 enum MarkdownRenderer {
+    /// Renders Markdown to HTML. Each top-level block's opening tag carries `data-line` / `data-end`
+    /// (1-based source lines) so the preview can scroll to whatever the editor is showing.
     static func html(from markdown: String) -> String {
+        let document = Document(parsing: markdown)
+        let body = document.children.map { block -> String in
+            let html = HTMLFormatter.format(block)
+            guard let range = block.range else { return html }
+            return annotate(html, start: range.lowerBound.line, end: range.upperBound.line)
+        }.joined()
         // swift-markdown doesn't know ==highlight==; convert it outside of code.
-        let body = HTMLFormatter.format(Document(parsing: markdown))
         return body.replacingOccurrences(of: #"==(?=\S)(.+?)(?<=\S)=="#, with: "<mark>$1</mark>", options: .regularExpression)
+    }
+
+    private static let firstTag = try! NSRegularExpression(pattern: #"^\s*<([A-Za-z][A-Za-z0-9]*)"#)
+
+    /// Adds the source line attributes to the block's first element (skips raw HTML comments and text).
+    static func annotate(_ html: String, start: Int, end: Int) -> String {
+        let ns = html as NSString
+        guard let m = firstTag.firstMatch(in: html, range: NSRange(location: 0, length: ns.length)) else { return html }
+        return ns.replacingCharacters(in: NSRange(location: NSMaxRange(m.range), length: 0),
+                                      with: " data-line=\"\(start)\" data-end=\"\(end)\"")
     }
 
     static let css = """
@@ -55,6 +72,7 @@ enum MarkdownRenderer {
     function __update(html) { document.getElementById("content").innerHTML = html; __enhance(); }
     window.addEventListener("load", __enhance);
     \(swapScript)
+    \(syncScript)
     </script>
     """
 
@@ -73,7 +91,37 @@ enum MarkdownRenderer {
     function __enhance() {}
     function __update(html) { document.getElementById("content").innerHTML = html; }
     \(swapScript)
+    \(syncScript)
     </script>
+    """
+
+    /// Scrolls so the given 1-based source line sits `ratio` of the way down the window (mirroring the editor).
+    /// Inside long blocks (lists, code) the position is interpolated line by line.
+    static let syncScript = """
+    function __syncLine(line, ratio, smooth) {
+      const blocks = document.querySelectorAll("#content > [data-line]");
+      if (!blocks.length) return;
+      let cur = null, next = null;
+      for (const el of blocks) {
+        if (+el.dataset.line <= line) cur = el; else { next = el; break; }
+      }
+      let y = 0;
+      if (cur) {
+        const start = +cur.dataset.line, end = Math.max(start, +cur.dataset.end);
+        const top = cur.getBoundingClientRect().top + window.scrollY, h = cur.offsetHeight;
+        if (line > end && next) {
+          const nextTop = next.getBoundingClientRect().top + window.scrollY;
+          y = top + h + (nextTop - top - h) * Math.min(1, (line - end) / Math.max(1, +next.dataset.line - end));
+        } else {
+          y = top + h * Math.min(1, (line - start) / (end - start + 1));
+        }
+      }
+      // At (or above) the start of the first block, show the very top of the page, padding included.
+      const firstTop = blocks[0].getBoundingClientRect().top + window.scrollY;
+      const dest = y <= firstTop + 0.5 ? 0 : Math.max(0, y - ratio * window.innerHeight);
+      if (Math.abs(dest - window.scrollY) < 1) return;
+      window.scrollTo({ top: dest, behavior: smooth ? "smooth" : "instant" });
+    }
     """
 
     /// Switches the page to another note without reloading, with the same motion as the editor: the old page
