@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         AppTheme(rawValue: UserDefaults.standard.string(forKey: Pref.theme) ?? "")?.apply(animated: false)
+        _ = AppUpdater.shared
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
@@ -57,6 +58,9 @@ struct MarklyCommands: Commands {
     @AppStorage(Pref.accent) private var accent = AccentChoice.system
 
     var body: some Commands {
+        CommandGroup(after: .appInfo) {
+            CheckForUpdatesCommand(updater: AppUpdater.shared)
+        }
         CommandGroup(replacing: .newItem) {
             Button("New File") { workspace.newFile() }
                 .keyboardShortcut("n")

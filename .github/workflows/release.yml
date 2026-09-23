@@ -5,6 +5,8 @@ name: Release
 #   MACOS_CERTIFICATE           base64 of the Developer ID Application .p12
 #   MACOS_CERTIFICATE_PASSWORD  password of that .p12
 #   APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD  (app-specific password) for notarytool
+# In-app updates (Sparkle) need SPARKLE_PRIVATE_KEY, the EdDSA key matching SUPublicEDKey in
+# Resources/Info.plist (export it with `generate_keys -x`). Without it no appcast.xml is published.
 # Without them the app is ad-hoc signed and users must allow it once in
 # System Settings › Privacy & Security.
 
@@ -26,6 +28,7 @@ jobs:
     timeout-minutes: 45
     env:
       HAS_SIGNING: ${{ secrets.MACOS_CERTIFICATE != '' }}
+      HAS_SPARKLE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -38,13 +41,6 @@ jobs:
 
       - name: Test
         run: swift test
-
-      - name: Build universal app
-        run: |
-          scripts/build-app.sh
-          ARCHS="$(lipo -archs build/Markly.app/Contents/MacOS/Markly)"
-          echo "Architectures: $ARCHS"
-          case "$ARCHS" in *arm64*x86_64*|*x86_64*arm64*) ;; *) echo "::error::Not a universal binary"; exit 1;; esac
 
       - name: Import Developer ID certificate
         if: env.HAS_SIGNING == 'true'
@@ -66,11 +62,13 @@ jobs:
           [ -n "$IDENTITY" ] || { echo "::error::No Developer ID Application identity in the certificate"; exit 1; }
           echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
 
-      - name: Sign with Developer ID
-        if: env.HAS_SIGNING == 'true'
+      # build-app.sh signs with $SIGN_IDENTITY when the certificate step set it, ad-hoc otherwise.
+      - name: Build universal app
         run: |
-          codesign --force --deep --options runtime --timestamp --sign "$SIGN_IDENTITY" build/Markly.app
-          codesign --verify --strict --verbose=2 build/Markly.app
+          scripts/build-app.sh
+          ARCHS="$(lipo -archs build/Markly.app/Contents/MacOS/Markly)"
+          echo "Architectures: $ARCHS"
+          case "$ARCHS" in *arm64*x86_64*|*x86_64*arm64*) ;; *) echo "::error::Not a universal binary"; exit 1;; esac
 
       - name: Package
         run: scripts/make-dmg.sh "$VERSION"
@@ -97,6 +95,18 @@ jobs:
           cd build
           shasum -a 256 "Markly-$VERSION.dmg" "Markly-$VERSION.zip" > "Markly-$VERSION.sha256"
           cat "Markly-$VERSION.sha256"
+
+      - name: Appcast
+        if: github.ref_type == 'tag' && env.HAS_SPARKLE_KEY == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          # The same notes the release gets, shown in Markly's update window.
+          gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" -f tag_name="$GITHUB_REF_NAME" --jq .body > "$RUNNER_TEMP/update-notes.md"
+          scripts/make-appcast.sh "$VERSION" "$GITHUB_RUN_NUMBER" \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/Markly-$VERSION.zip" \
+            "$RUNNER_TEMP/update-notes.md"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -129,12 +139,15 @@ jobs:
 
           $INSTALL
           NOTES
+          ASSETS=("build/Markly-$VERSION.dmg" "build/Markly-$VERSION.zip" "build/Markly-$VERSION.sha256")
+          # Markly reads releases/latest/download/appcast.xml, so it must ship with the release itself.
+          if [ -f build/appcast.xml ]; then ASSETS+=(build/appcast.xml); else echo "::warning::No SPARKLE_PRIVATE_KEY; this release will not be offered as an in-app update"; fi
           gh release create "$GITHUB_REF_NAME" \
             --title "Markly $VERSION" \
             --notes-file "$RUNNER_TEMP/notes.md" \
             --generate-notes \
             --verify-tag \
-            "build/Markly-$VERSION.dmg" "build/Markly-$VERSION.zip" "build/Markly-$VERSION.sha256"
+            "${ASSETS[@]}"
 
       - name: Clean up keychain
         if: always() && env.HAS_SIGNING == 'true'

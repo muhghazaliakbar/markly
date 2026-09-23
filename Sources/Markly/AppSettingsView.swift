@@ -296,6 +296,7 @@ private struct EditorBehaviorSettings: View {
 private struct PrivacySettings: View {
     @AppStorage(Pref.previewNetwork) private var previewNetwork = true
     @AppStorage(Pref.remoteImages) private var remoteImages = true
+    @ObservedObject private var updater = AppUpdater.shared
 
     var body: some View {
         Form {
@@ -330,6 +331,29 @@ private struct PrivacySettings: View {
                 Text("Enforced with a Content-Security-Policy in the preview and in exported HTML.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
+            }
+
+            Section {
+                SettingRow(icon: "arrow.down.circle", color: .purple, title: "Check for updates automatically",
+                           detail: "Once a day, asks GitHub whether a newer Markly has been released. Sends only Markly's version number.") {
+                    Toggle("", isOn: $updater.checksAutomatically).labelsHidden().toggleStyle(.switch)
+                }
+                SettingRow(icon: "square.and.arrow.down", color: .indigo, title: "Download and install automatically",
+                           detail: "Updates install in the background and apply the next time Markly quits.") {
+                    Toggle("", isOn: $updater.downloadsAutomatically).labelsHidden().toggleStyle(.switch)
+                }
+                .disabled(!updater.checksAutomatically)
+            } header: {
+                Label("Updates", systemImage: "arrow.triangle.2.circlepath")
+            } footer: {
+                HStack {
+                    Text("Every update is verified with Markly's signing key before it is installed.")
+                    Spacer()
+                    Button("Check Now") { updater.checkForUpdates() }
+                        .disabled(!updater.canCheck)
+                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -491,6 +515,7 @@ private struct NoticesSheet: View {
     private let notices: [(String, String, String)] = [
         ("swift-markdown", "Apache License 2.0", "Markdown parsing and HTML rendering. © Apple Inc. and the Swift project authors."),
         ("swift-cmark (cmark-gfm)", "BSD 2-Clause", "GitHub Flavored Markdown parser. © John MacFarlane, GitHub."),
+        ("Sparkle", "MIT License", "In-app updates. © Andy Matuschak, the Sparkle Project contributors."),
         ("KaTeX", "MIT License", "Math typesetting in the preview, loaded from jsDelivr when allowed. © Khan Academy and contributors."),
         ("highlight.js", "BSD 3-Clause", "Code colouring in the preview, loaded from jsDelivr when allowed. © Ivan Sagalaev and contributors."),
     ]

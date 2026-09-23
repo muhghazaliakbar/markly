@@ -13,7 +13,7 @@ Built with SwiftUI and AppKit (TextKit) and Apple's native **Liquid Glass** desi
 - **App settings** (⌘,). A standard Settings window with five tabs:
   - **General:** appearance (Light, Dark, Auto), accent color (presets or any custom color), reopen last note, word count, file extension for new notes.
   - **Editor:** smart lists, *typewriter scrolling* (the line you're writing stays centred), *focus on paragraph* (everything else dims), note transition animation.
-  - **Privacy:** Markly has no accounts, analytics or tracking. You can turn off the preview's CDN scripts (KaTeX, highlight.js) and loading images from the web; both are enforced with a Content-Security-Policy.
+  - **Privacy:** Markly has no accounts, analytics or tracking. You can turn off the preview's CDN scripts (KaTeX, highlight.js) and loading images from the web; both are enforced with a Content-Security-Policy. Update checks are off until you agree to them.
   - **Shortcuts** and **About** (version, open-source notices, copy diagnostics, reset all settings).
 - **Inline image previews.** An image on its own line is drawn right in the editor at small, medium or full width.
 - **Git sync** from the sidebar. A button shows the branch and number of pending changes; its popover commits everything, pulls (rebase) and pushes in one click, or initializes a new repository.
@@ -47,6 +47,8 @@ Grab the latest `Markly-x.y.z.dmg` from [Releases](https://github.com/muhghazali
 
 If a release is not notarised, macOS blocks it the first time you open it. Go to **System Settings › Privacy & Security** and click **Open Anyway**, or run `xattr -dr com.apple.quarantine /Applications/Markly.app`.
 
+After that, Markly updates itself: choose **Markly › Check for Updates…**, or allow automatic checks when Markly asks on its second launch (Settings › Privacy › Updates). Updates come from this repository's releases and are verified with Markly's EdDSA signing key ([Sparkle](https://sparkle-project.org)).
+
 ## Getting the code
 
 ```bash
@@ -65,7 +67,7 @@ scripts/build-app.sh --install  # also copies it to /Applications
 
 For development, open `Package.swift` in Xcode and run the `Markly` scheme, or use `swift run`. Run the tests with `swift test`.
 
-CI (`.github/workflows/ci.yml`) builds and tests every push and pull request. Pushing a `vX.Y.Z` tag runs `.github/workflows/release.yml`, which builds the universal app, packages it with `scripts/make-dmg.sh` and publishes a GitHub release with the DMG, a zip and checksums.
+CI (`.github/workflows/ci.yml`) builds and tests every push and pull request. Pushing a `vX.Y.Z` tag runs `.github/workflows/release.yml`, which builds the universal app, packages it with `scripts/make-dmg.sh` and publishes a GitHub release with the DMG, a zip, checksums and `appcast.xml`, the feed in-app updates read from `releases/latest/download/appcast.xml` (`scripts/make-appcast.sh`; needs the `SPARKLE_PRIVATE_KEY` secret).
 
 ## Project layout
 
