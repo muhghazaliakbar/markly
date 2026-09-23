@@ -222,3 +222,131 @@ struct BehindWindowBlur: NSViewRepresentable {
     }
 }
 
+
+/// A progressive ("variable") blur like Apple uses in Maps and under toolbars: full strength at the trailing
+/// edge, easing smoothly to perfectly clear at the leading edge. No tint, no material — just blur.
+///
+/// AppKit has no public variable blur, so this uses the same Core Animation `variableBlur` filter the system
+/// uses, applied to an `NSVisualEffectView`'s backdrop layer. If that filter isn't available on some future
+/// macOS, it falls back to a plain within-window blur masked with the same gradient.
+struct ProgressiveBlur: NSViewRepresentable {
+    /// Blur radius at the trailing edge, in points.
+    var radius: CGFloat = 18
+
+    func makeNSView(context: Context) -> ProgressiveBlurView {
+        let view = ProgressiveBlurView()
+        view.radius = radius
+        return view
+    }
+
+    func updateNSView(_ view: ProgressiveBlurView, context: Context) {
+        view.radius = radius
+    }
+}
+
+final class ProgressiveBlurView: NSVisualEffectView {
+    var radius: CGFloat = 18 { didSet { if radius != oldValue { apply() } } }
+    private var appliedSize: CGSize = .zero
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        blendingMode = .withinWindow
+        state = .active
+        material = .fullScreenUI
+        wantsLayer = true
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }  // purely visual
+
+    override func layout() {
+        super.layout()
+        if bounds.size != appliedSize { apply() }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        apply()
+    }
+
+    // The effect view builds (and sometimes rebuilds) its backdrop layers when it updates its layer.
+    override func updateLayer() {
+        super.updateLayer()
+        apply()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        // The effect view rebuilds its layers on appearance changes; re-apply on the next turn.
+        DispatchQueue.main.async { [weak self] in self?.apply() }
+    }
+
+    private func apply() {
+        appliedSize = bounds.size
+        guard bounds.width > 1, bounds.height > 1, let root = layer else { return }
+        guard let mask = Self.maskImage() else { return }
+
+        if let blur = Self.variableBlur(radius: radius, mask: mask) {
+            // The backdrop layer appears once the effect view has drawn; updateLayer() calls back here.
+            guard let backdrop = Self.findBackdrop(in: root) else { return }
+            backdrop.filters = [blur]
+            // Backdrops render downsampled by default, which shows as a seam where the blur is zero.
+            // Full resolution keeps the clear edge pixel-identical to the content beside it.
+            backdrop.setValue(1.0, forKey: "scale")
+            // Hide the material's tint and grain so only the blur remains.
+            for sibling in backdrop.superlayer?.sublayers ?? [] where sibling !== backdrop { sibling.isHidden = true }
+            root.mask = nil
+        } else {
+            // Fallback when the system filter is unavailable: uniform blur, faded out with the same curve.
+            let gradient = CAGradientLayer()
+            gradient.frame = root.bounds
+            gradient.startPoint = CGPoint(x: 0, y: 0.5)
+            gradient.endPoint = CGPoint(x: 1, y: 0.5)
+            gradient.colors = Self.curve.map { NSColor.black.withAlphaComponent($0).cgColor }
+            gradient.locations = Self.curve.indices.map { NSNumber(value: Double($0) / Double(Self.curve.count - 1)) }
+            root.mask = gradient
+        }
+    }
+
+    /// Smootherstep samples: 0 on the left → 1 on the right, no visible banding.
+    private static let curve: [CGFloat] = (0...16).map { i in
+        let t = Double(i) / 16
+        return CGFloat(t * t * t * (t * (t * 6 - 15) + 10))
+    }
+
+    private static func maskImage() -> CGImage? {
+        let steps = 256
+        var pixels = [UInt8](repeating: 0, count: steps * 4)
+        for i in 0..<steps {
+            let t = Double(i) / Double(steps - 1)
+            let e = t * t * t * (t * (t * 6 - 15) + 10)
+            pixels[i * 4 + 3] = UInt8((e * 255).rounded())  // black, alpha ramps up to the right
+        }
+        guard let provider = CGDataProvider(data: Data(pixels) as CFData) else { return nil }
+        return CGImage(width: steps, height: 1, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: steps * 4,
+                       space: CGColorSpaceCreateDeviceRGB(),
+                       bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                       provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
+    }
+
+    private static func findBackdrop(in layer: CALayer) -> CALayer? {
+        if NSStringFromClass(type(of: layer)).contains("Backdrop") { return layer }
+        for sub in layer.sublayers ?? [] {
+            if let found = findBackdrop(in: sub) { return found }
+        }
+        return nil
+    }
+
+    private static func variableBlur(radius: CGFloat, mask: CGImage) -> NSObject? {
+        guard let filterClass = NSClassFromString("CAFilter") as? NSObject.Type else { return nil }
+        let selector = NSSelectorFromString("filterWithType:")
+        guard filterClass.responds(to: selector),
+              let filter = filterClass.perform(selector, with: "variableBlur")?.takeUnretainedValue() as? NSObject
+        else { return nil }
+        filter.setValue(radius, forKey: "inputRadius")
+        filter.setValue(mask, forKey: "inputMaskImage")
+        filter.setValue(true, forKey: "inputNormalizeEdges")
+        return filter
+    }
+}

@@ -153,19 +153,15 @@ struct ContentView: View {
     }
 }
 
-/// Frosted glass behind the appearance panel only. The left edge feathers out so it reads as depth,
-/// not as a hard slab. Esc closes the panel.
+/// Progressive blur behind the appearance panel: strongest at the window's right edge, fading to clear
+/// past the panel's left edge, so the page dissolves under the panel instead of meeting a slab.
+/// Esc closes the panel.
 struct PanelFrost: View {
     @Environment(\.workspaceClose) private var close
 
     var body: some View {
-        Rectangle()
-            .fill(.ultraThinMaterial)
-            .mask {
-                LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.14)],
-                               startPoint: .leading, endPoint: .trailing)
-            }
-            .padding(.leading, -36)
+        ProgressiveBlur(radius: 18)
+            .padding(.leading, -96)
             .ignoresSafeArea()
             .allowsHitTesting(false)
             .background {

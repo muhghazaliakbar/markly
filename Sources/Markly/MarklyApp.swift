@@ -6,7 +6,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
         AppTheme(rawValue: UserDefaults.standard.string(forKey: Pref.theme) ?? "")?.apply(animated: false)
     }
 
