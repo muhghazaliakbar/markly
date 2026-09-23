@@ -73,7 +73,7 @@ Preferences live in the `app.markly.Markly` defaults domain.
 - **`window.scrollTo` applies on the next frame**; tests must wait before measuring.
 - **NSTextView's `textContainerOrigin` can be overridden** for asymmetric insets; setting `contentInsets` manually disables automatic top insets under the toolbar.
 - **Programmatic cursor warps don't generate hover events**, so hover can't be verified by automation.
-- **Known issue:** Git Sync runs `git add -A` on the whole repository. Notes kept inside a code repo will commit unrelated files. Scope add/commit/status to the notes folder.
+- **Git is scoped to the notes folder.** Notes often live inside a bigger repo (a project's `docs/`, or this repo's sample notes). Every status/add/commit uses a pathspec for the sidebar root holding the note, and Sync commits only the files the user left checked (`commit -- <paths>` keeps other staged files out). `GitTests` guards this.
 
 ## Verifying UI changes on a real Mac
 

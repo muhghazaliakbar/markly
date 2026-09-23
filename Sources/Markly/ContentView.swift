@@ -39,6 +39,12 @@ struct ContentView: View {
                     focusParagraph: focusParagraph, smartLists: smartLists, selectionToolbar: selectionToolbar)
     }
 
+    /// Git is scoped to the sidebar folder that holds the current note, not the whole repository.
+    private var notesFolder: URL? {
+        guard let url = workspace.currentURL else { return workspace.roots.first }
+        return workspace.root(containing: url) ?? url.deletingLastPathComponent()
+    }
+
     var body: some View {
         Group {
             if !workspace.hasFolders {
@@ -79,11 +85,11 @@ struct ContentView: View {
         .onChange(of: workspace.focusMode) { _, on in
             withAnimation(GlassStyle.spring) { columns = on ? .detailOnly : .all }
         }
-        .onChange(of: workspace.currentURL, initial: true) { _, url in
-            git.refresh(folder: url?.deletingLastPathComponent() ?? workspace.roots.first)
+        .onChange(of: workspace.currentURL, initial: true) { _, _ in
+            git.refresh(folder: notesFolder)
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            git.refresh(folder: workspace.currentURL?.deletingLastPathComponent() ?? workspace.roots.first)
+            git.refresh(folder: notesFolder)
         }
         .alert("Something went wrong", isPresented: Binding(get: { workspace.errorMessage != nil },
                                                            set: { if !$0 { workspace.errorMessage = nil } })) {
