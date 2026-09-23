@@ -313,6 +313,14 @@ final class MarkdownTextView: NSTextView {
 
     var onCancel: (() -> Bool)?
 
+    /// Called when the reader scrolls the editor themselves (wheel/trackpad).
+    var onUserScroll: (() -> Void)?
+
+    override func scrollWheel(with event: NSEvent) {
+        onUserScroll?()
+        super.scrollWheel(with: event)
+    }
+
     /// Reports whether a window point is over floating UI drawn above the text (the format bar).
     var isOverOverlay: ((NSPoint) -> Bool)?
 

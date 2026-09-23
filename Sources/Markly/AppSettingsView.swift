@@ -271,7 +271,7 @@ private struct EditorBehaviorSettings: View {
                     Toggle("", isOn: $focusParagraph).labelsHidden().toggleStyle(.switch)
                 }
                 SettingRow(icon: "arrow.up.and.down.text.horizontal", color: .green, title: "Sync preview scrolling",
-                           detail: "The preview follows the line you're editing, or the part of the note you're reading.") {
+                           detail: "Editor and preview scroll together, both ways. The preview follows the line you're editing; scroll either side and the other keeps up.") {
                     Toggle("", isOn: $syncPreview).labelsHidden().toggleStyle(.switch)
                 }
                 SettingRow(icon: "rectangle.2.swap", color: .pink, title: "Animate note transitions",

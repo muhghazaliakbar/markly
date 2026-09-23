@@ -22,7 +22,10 @@ struct PreviewView: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> WKWebView {
-        let web = WKWebView()
+        let config = WKWebViewConfiguration()
+        // Weak proxy: the content controller retains its handlers.
+        config.userContentController.add(WeakMessageHandler(context.coordinator), name: "markly")
+        let web = WKWebView(frame: .zero, configuration: config)
         web.navigationDelegate = context.coordinator
         web.setValue(false, forKey: "drawsBackground")
         web.alphaValue = 0  // faded in once the first render is ready, so there's never a blank flash
@@ -40,8 +43,20 @@ struct PreviewView: NSViewRepresentable {
                                      animate: animateSwitch)
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    static func dismantleNSView(_ web: WKWebView, coordinator: Coordinator) {
+        web.configuration.userContentController.removeScriptMessageHandler(forName: "markly")
+    }
+
+    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         weak var sync: ScrollSync?
+
+        /// The reader scrolled the preview: let the editor follow.
+        func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard let body = message.body as? [String: Any], let pos = body["pos"] as? Double else { return }
+            MainActor.assumeIsolated {
+                sync?.previewMoved(position: pos, atTop: body["atTop"] as? Bool ?? false, atEnd: body["atEnd"] as? Bool ?? false)
+            }
+        }
         private var loadedKey: String?
         private var loadedPath: String?
         private var ready = false
@@ -121,6 +136,15 @@ struct PreviewView: NSViewRepresentable {
                 decisionHandler(.allow)
             }
         }
+    }
+}
+
+/// Forwards script messages without the content controller keeping the coordinator alive.
+final class WeakMessageHandler: NSObject, WKScriptMessageHandler {
+    weak var target: WKScriptMessageHandler?
+    init(_ target: WKScriptMessageHandler) { self.target = target }
+    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        target?.userContentController(controller, didReceive: message)
     }
 }
 

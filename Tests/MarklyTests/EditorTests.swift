@@ -351,6 +351,13 @@ final class EditorTests: XCTestCase {
         let between = try XCTUnwrap(eval("window.scrollY") as? Double)
         XCTAssertGreaterThan(between, at81)
         XCTAssertLessThan(between, at83)
+
+        // Preview → editor: mapping a scroll offset back to a source position is the exact inverse.
+        for pos in [81.0, 82.5, 101.25, 141.0] {
+            let y = try XCTUnwrap(eval("__syncDest(\(pos), 0)") as? Double)
+            let back = try XCTUnwrap(eval("__sourceAt(\(y))") as? Double)
+            XCTAssertEqual(back, pos, accuracy: 0.05, "round trip for line \(pos)")
+        }
         withExtendedLifetime(nav) {}
     }
 
@@ -427,5 +434,60 @@ final class EditorTests: XCTestCase {
         XCTAssertEqual(Split.editorWidth(total: 1000, fraction: 0.1), 320, "editor never below its minimum")
         XCTAssertEqual(Split.editorWidth(total: 1000, fraction: 0.95), 719, "preview keeps 280 pt (+1 pt divider)")
         XCTAssertEqual(Split.editorWidth(total: 500, fraction: 0.5), 320, "narrow window: editor keeps priority")
+    }
+
+    func testScrollSyncLeaderRulePreventsFeedback() {
+        let sync = ScrollSync()
+        var toPreview = 0, toEditor = 0
+        sync.toPreview = { _, _, _, _ in toPreview += 1 }
+        sync.toEditor = { _, _, _ in toEditor += 1 }
+
+        sync.previewMoved(position: 40, atTop: false, atEnd: false)
+        XCTAssertEqual(toEditor, 1)
+        // The editor scrolling because it follows must not echo back to the preview.
+        sync.editorMoved(position: 40, ratio: 0, smooth: false)
+        let flushed = expectation(description: "flushed")
+        DispatchQueue.main.async { flushed.fulfill() }
+        wait(for: [flushed], timeout: 1)
+        XCTAssertEqual(toPreview, 0, "ignored while the preview leads")
+
+        // Once the reader touches the editor, it leads again.
+        sync.editorTookOver()
+        sync.editorMoved(position: 50, ratio: 0, smooth: false)
+        let flushed2 = expectation(description: "flushed2")
+        DispatchQueue.main.async { flushed2.fulfill() }
+        wait(for: [flushed2], timeout: 1)
+        XCTAssertEqual(toPreview, 1)
+    }
+
+    /// The editor scrolls to the line the preview asks for, and then reports that same line back.
+    func testEditorFollowsPreviewPosition() {
+        let text = (1...200).map { "Line \($0)" }.joined(separator: "\n")
+        let view = EditorView(text: .constant(text), style: EditorStyle())
+        let coordinator = view.makeCoordinator()
+        let tv = makeEditor(text, select: NSRange(location: 0, length: 0))
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
+        scroll.documentView = tv
+        // As in the app: the text view grows with its content.
+        tv.isVerticallyResizable = true
+        tv.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        tv.frame.size.width = 600
+        tv.sizeToFit()
+        coordinator.textView = tv
+        let sync = ScrollSync()
+        coordinator.scrollSync = sync
+        var reported: Double?
+        sync.toPreview = { position, _, _, _ in reported = position }
+
+        coordinator.follow(position: 120.0, atTop: false, atEnd: false, animated: false)
+        sync.editorTookOver()  // let the report through for the check
+        coordinator.reportPosition(smooth: false)
+        let flushed = expectation(description: "flushed")
+        DispatchQueue.main.async { flushed.fulfill() }
+        wait(for: [flushed], timeout: 1)
+        XCTAssertEqual(reported ?? 0, 120, accuracy: 0.6)
+
+        coordinator.follow(position: 1, atTop: true, atEnd: false, animated: false)
+        XCTAssertEqual(scroll.contentView.bounds.origin.y, -scroll.contentInsets.top, accuracy: 0.5, "top of the note")
     }
 }

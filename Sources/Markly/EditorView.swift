@@ -80,6 +80,7 @@ struct EditorView: NSViewRepresentable {
         coordinator.highlighter.imageProvider = { [weak coordinator] src in
             ImageStore.shared.image(for: src, relativeTo: coordinator?.parent.baseURL)
         }
+        textView.onUserScroll = { [weak coordinator] in coordinator?.userScrolledEditor() }
         textView.onColumnWidthChange = { [weak coordinator] width in
             coordinator?.columnWidthChanged(width)
         }
@@ -99,7 +100,12 @@ struct EditorView: NSViewRepresentable {
         guard let textView = coordinator.textView else { return }
         textView.onOpenLink = { onOpenLink($0) }
         coordinator.toolbar?.trailingInset = overlayTrailingInset
-        coordinator.scrollSync = scrollSync
+        if coordinator.scrollSync !== scrollSync {
+            coordinator.scrollSync = scrollSync
+            scrollSync?.toEditor = { [weak coordinator] position, atTop, atEnd in
+                coordinator?.follow(position: position, atTop: atTop, atEnd: atEnd)
+            }
+        }
         if coordinator.style != style {
             coordinator.scheduleStyle(style)
         }
@@ -137,6 +143,81 @@ struct EditorView: NSViewRepresentable {
 
         // MARK: Preview scroll sync
 
+        // Following the preview: eases the editor toward a target each display frame, like the preview does.
+        private var followTarget: CGFloat?
+        private var followLink: CADisplayLink?
+        private var followLast: CFTimeInterval = 0
+
+        func userScrolledEditor() {
+            scrollSync?.editorTookOver()
+            stopFollowing()
+        }
+
+        /// Scrolls so the fractional source line `position` sits at the top of the visible viewport.
+        func follow(position: Double, atTop: Bool, atEnd: Bool, animated: Bool = true) {
+            guard let tv = textView, let scroll = tv.enclosingScrollView,
+                  let lm = tv.layoutManager, let tc = tv.textContainer else { return }
+            let clip = scroll.contentView
+            let minY = -scroll.contentInsets.top
+            let maxY = max(minY, tv.frame.height - clip.bounds.height + scroll.contentInsets.bottom)
+            var target: CGFloat
+            if atTop {
+                target = minY
+            } else if atEnd {
+                target = maxY
+            } else {
+                let ns = tv.string as NSString
+                _ = lineIndex(at: 0)  // make sure line starts are current
+                let index = min(max(Int(position) - 1, 0), lineStarts.count - 1)
+                let start = lineStarts[index]
+                let end = index + 1 < lineStarts.count ? lineStarts[index + 1] : ns.length
+                let glyphs = lm.glyphRange(forCharacterRange: NSRange(location: start, length: max(1, min(end, ns.length) - start)),
+                                           actualCharacterRange: nil)
+                let rect = lm.boundingRect(forGlyphRange: glyphs, in: tc)
+                let y = tv.textContainerOrigin.y + rect.minY + rect.height * CGFloat(position - Double(index + 1))
+                // The viewport's top edge sits under the toolbar; line the spot up with the visible top instead.
+                target = y - scroll.contentInsets.top
+            }
+            followTarget = min(max(target, minY), maxY)
+            if !animated || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                jump(to: followTarget!)
+                return
+            }
+            if followLink == nil {
+                followLast = CACurrentMediaTime()
+                let link = tv.displayLink(target: self, selector: #selector(followStep(_:)))
+                link.add(to: .main, forMode: .common)
+                followLink = link
+            }
+        }
+
+        @objc private func followStep(_ link: CADisplayLink) {
+            guard let target = followTarget, let clip = textView?.enclosingScrollView?.contentView else { stopFollowing(); return }
+            let now = CACurrentMediaTime()
+            let dt = min(0.05, now - followLast)
+            followLast = now
+            let current = clip.bounds.origin.y
+            let diff = target - current
+            if abs(diff) < 0.5 {
+                jump(to: target)
+                stopFollowing()
+                return
+            }
+            jump(to: current + diff * CGFloat(1 - exp(-dt / 0.055)))
+        }
+
+        private func jump(to y: CGFloat) {
+            guard let scroll = textView?.enclosingScrollView else { return }
+            scroll.contentView.setBoundsOrigin(NSPoint(x: scroll.contentView.bounds.origin.x, y: y))
+            scroll.reflectScrolledClipView(scroll.contentView)
+        }
+
+        private func stopFollowing() {
+            followLink?.invalidate()
+            followLink = nil
+            followTarget = nil
+        }
+
         /// UTF-16 offsets where each line starts; rebuilt lazily after edits.
         private var lineStarts: [Int] = [0]
         private var lineStartsValid = false
@@ -170,7 +251,12 @@ struct EditorView: NSViewRepresentable {
         func reportPosition(smooth: Bool?) {
             guard let sync = scrollSync, sync.isEnabled, let tv = textView,
                   let lm = tv.layoutManager, let tc = tv.textContainer else { return }
-            let visible = tv.visibleRect
+            var visible = tv.visibleRect
+            // The top of the viewport sits under the toolbar; anchor to what's actually visible, the same
+            // reference the preview → editor direction uses, so the two directions agree exactly.
+            let insetTop = tv.enclosingScrollView?.contentInsets.top ?? 0
+            visible.origin.y += insetTop
+            visible.size.height -= insetTop
             guard visible.height > 1 else { return }
             let origin = tv.textContainerOrigin
             let ns = tv.string as NSString
@@ -461,6 +547,8 @@ struct EditorView: NSViewRepresentable {
 
         func textViewDidChangeSelection(_ notification: Notification) {
             guard !highlighting else { return }
+            // Clicking or typing in the editor makes it the leader again.
+            if NSEvent.pressedMouseButtons != 0 || NSApp.currentEvent?.type == .keyDown { userScrolledEditor() }
             toolbar?.selectionChanged()
             reportPosition(smooth: nil)
             if style.focusParagraph { updateFocusDim() }

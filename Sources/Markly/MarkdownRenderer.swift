@@ -155,10 +155,42 @@ enum MarkdownRenderer {
         __syncFrame = requestAnimationFrame(__syncStep);
       }
     }
-    // The reader scrolling the preview themselves wins over the follower.
-    window.addEventListener("wheel", () => {
-      if (__syncFrame) { cancelAnimationFrame(__syncFrame); __syncFrame = 0; }
+    // The reader scrolling the preview themselves wins over the follower…
+    let __readerAt = -1e9, __reportFrame = 0;
+    for (const type of ["wheel", "keydown", "pointerdown", "touchstart"]) {
+      window.addEventListener(type, () => {
+        __readerAt = performance.now();
+        if (__syncFrame) { cancelAnimationFrame(__syncFrame); __syncFrame = 0; }
+      }, { passive: true });
+    }
+    // …and the editor follows them. Only scrolling that comes from the reader (wheel and trackpad, including
+    // momentum, keys, clicks) is reported; the follower's own scrolling is not, so the two never feed back.
+    window.addEventListener("scroll", () => {
+      if (performance.now() - __readerAt > 600 || __reportFrame) return;
+      __reportFrame = requestAnimationFrame(() => {
+        __reportFrame = 0;
+        const handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.markly;
+        if (!handler) return;
+        const max = document.documentElement.scrollHeight - window.innerHeight;
+        handler.postMessage({ pos: __sourceAt(window.scrollY), atTop: window.scrollY <= 0.5, atEnd: window.scrollY >= max - 0.5 });
+      });
     }, { passive: true });
+    /// The fractional source line at page offset `y` — the inverse of __syncDest.
+    function __sourceAt(y) {
+      const blocks = document.querySelectorAll("#content > [data-line]");
+      if (!blocks.length) return 1;
+      let cur = null, next = null;
+      for (const el of blocks) {
+        if (el.getBoundingClientRect().top + window.scrollY <= y + 0.5) cur = el; else { next = el; break; }
+      }
+      if (!cur) return 1;
+      const start = +cur.dataset.line, end = Math.max(start, +cur.dataset.end) + 1;
+      const top = cur.getBoundingClientRect().top + window.scrollY, h = cur.offsetHeight;
+      if (y < top + h) return start + (end - start) * Math.max(0, (y - top) / Math.max(1, h));
+      if (!next) return end;
+      const nextTop = next.getBoundingClientRect().top + window.scrollY;
+      return end + (+next.dataset.line - end) * Math.min(1, (y - top - h) / Math.max(1, nextTop - top - h));
+    }
     """
 
     /// Switches the page to another note without reloading, with the same motion as the editor: the old page

@@ -1,4 +1,5 @@
 import Foundation
+import QuartzCore
 
 /// Carries the editor's reading position to the preview. Deliberately not observable: it never causes a
 /// SwiftUI update, and bursts of scroll/caret events are coalesced into one message per run-loop turn.
@@ -13,10 +14,31 @@ final class ScrollSync {
     private var pendingSmooth = false
     private var scheduled = false
 
+    /// Set by the editor: scroll to a fractional source line (`atTop`/`atEnd` pin the ends of the note).
+    var toEditor: ((_ position: Double, _ atTop: Bool, _ atEnd: Bool) -> Void)?
+
     var isEnabled: Bool { Pref.bool(Pref.syncPreview, default: true) }
 
-    func editorMoved(position: Double, ratio: Double, smooth: Bool) {
+    /// Whichever side the reader is scrolling leads; the other only follows. While the preview leads, the
+    /// editor's own scroll reports (caused by following) are ignored, so the two never pull on each other.
+    private var previewLeadsUntil: CFTimeInterval = 0
+    var previewIsLeading: Bool { CACurrentMediaTime() < previewLeadsUntil }
+
+    /// The reader scrolled the preview.
+    func previewMoved(position: Double, atTop: Bool, atEnd: Bool) {
         guard isEnabled else { return }
+        previewLeadsUntil = CACurrentMediaTime() + 0.4
+        last = (position, 0)
+        toEditor?(position, atTop, atEnd)
+    }
+
+    /// The reader scrolled or clicked in the editor: it takes the lead back at once.
+    func editorTookOver() {
+        previewLeadsUntil = 0
+    }
+
+    func editorMoved(position: Double, ratio: Double, smooth: Bool) {
+        guard isEnabled, !previewIsLeading else { return }
         last = (position, min(max(ratio, 0), 1))
         pendingSmooth = pendingSmooth || smooth
         guard !scheduled else { return }

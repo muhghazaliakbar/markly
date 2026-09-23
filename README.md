@@ -20,7 +20,7 @@ Built with SwiftUI and AppKit (TextKit) and Apple's native **Liquid Glass** desi
 - **Format bar on selection.** Select text and a Liquid Glass bar appears above it, like Medium's inline editor: bold, italic, strikethrough, highlight, inline code, link (with an inline URL field, prefilled from the clipboard), large/small heading and quote. Active formats are lit; pressing one again removes it. Esc dismisses it; it can be turned off in Settings › Editor.
 - **Clickable tasks.** Click `[ ]` to check it off. ⌘-click a link to open it; relative `.md` links open inside the editor.
 - **Smart lists.** Return continues a list (numbers go up, checkboxes reset), Return on an empty item ends it, and Tab / ⇧Tab indent.
-- **Preview pane** (⌥⌘P) with GitHub-style rendering, KaTeX math and syntax highlighting. It scrolls with the editor: the result of the line you're editing stays in view (Settings › Editor › Sync preview scrolling).
+- **Preview pane** (⌥⌘P) with GitHub-style rendering, KaTeX math and syntax highlighting. It scrolls with the editor in both directions: the result of the line you're editing stays in view, and scrolling the preview moves the editor too (Settings › Editor › Sync preview scrolling).
 - **Export** to HTML or PDF, or print.
 - **Appearance.** Light, dark or system theme, and the macOS accent color or one of your own.
 - **Focus mode** (⇧⌘F) hides everything but the page.
