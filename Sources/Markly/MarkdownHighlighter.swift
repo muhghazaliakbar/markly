@@ -6,6 +6,7 @@ extension NSAttributedString.Key {
     static let mdRule = NSAttributedString.Key("mdRule")
     static let mdTaskBox = NSAttributedString.Key("mdTaskBox")
     static let mdLinkURL = NSAttributedString.Key("mdLinkURL")
+    static let mdImage = NSAttributedString.Key("mdImage")
 }
 
 enum Palette {
@@ -37,6 +38,10 @@ enum Palette {
 /// or collapsed entirely on lines that don't hold the caret, depending on `SyntaxVisibility`.
 final class MarkdownHighlighter {
     var style = EditorStyle()
+    /// Returns a loaded image for a Markdown image source, or nil if unavailable (yet).
+    var imageProvider: ((String) -> NSImage?)?
+    /// Width of the text column, used to size inline images.
+    var columnWidth: CGFloat = 640
 
     private static func rx(_ p: String, _ o: NSRegularExpression.Options = []) -> NSRegularExpression {
         try! NSRegularExpression(pattern: p, options: o)
@@ -49,6 +54,7 @@ final class MarkdownHighlighter {
     private let listRx = rx(#"^(\s*)([-*+]|\d{1,9}[.)])(\s+)(\[[ xX]\]\s)?"#)
     private let ruleRx = rx(#"^\s{0,3}([-*_])(\s*\1){2,}\s*$"#)
     private let tableRx = rx(#"^\s*\|.*\|\s*$"#)
+    private let imageLineRx = rx(#"^\s*!\[[^\]\n]*\]\(<?([^)\s>]+)>?(?:\s+"[^"]*")?\)\s*$"#)
 
     private let inlineCodeRx = rx(#"(`+)(?!`)(.+?)(?<!`)\1(?!`)"#)
     private let imageRx = rx(#"!\[([^\]\n]*)\]\(([^)\n]*)\)"#)
@@ -100,7 +106,8 @@ final class MarkdownHighlighter {
         var loc = 0
 
         func isActive(_ lineRange: NSRange) -> Bool {
-            guard style.syntax == .focused else { return true }
+            if style.syntax == .always { return true }
+            if style.syntax == .hidden { return false }
             guard let a = active else { return false }
             if NSIntersectionRange(a, lineRange).length > 0 { return true }
             return a.location == lineRange.location || (a.location == NSMaxRange(lineRange) && a.location == text.length)
@@ -182,6 +189,22 @@ final class MarkdownHighlighter {
                 for m in pipes.matches(in: line, range: lineFull) {
                     storage.addAttribute(.foregroundColor, value: Palette.syntax, range: abs(m.range))
                 }
+                continue
+            }
+
+            // Image on its own line: reserve room below it and let the layout manager draw a preview.
+            if style.imagePreview != .off, let m = imageLineRx.firstMatch(in: line, range: lineFull),
+               let image = imageProvider?(lineNS.substring(with: m.range(at: 1))) {
+                let maxWidth = max(80, columnWidth * style.imagePreview.fraction)
+                let maxHeight = 640 * style.imagePreview.fraction
+                let scale = min(1, maxWidth / image.size.width, maxHeight / image.size.height)
+                let size = NSSize(width: (image.size.width * scale).rounded(), height: (image.size.height * scale).rounded())
+                let p = baseParagraph
+                p.paragraphSpacing = size.height + 18
+                storage.addAttribute(.paragraphStyle, value: p, range: lineRange)
+                storage.addAttribute(.mdImage, value: ImageBox(image: image, size: size), range: content)
+                applyInline(storage, line: lineNS, offset: content.location, active: activeLine, syntax: &syntaxRanges)
+                if !activeLine { syntaxRanges.append((content, true)) }
                 continue
             }
 

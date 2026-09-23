@@ -4,6 +4,7 @@ import SwiftUI
 struct EditorView: NSViewRepresentable {
     @Binding var text: String
     var style: EditorStyle
+    var baseURL: URL?
     var onOpenLink: (String) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -44,9 +45,18 @@ struct EditorView: NSViewRepresentable {
         scroll.drawsBackground = true
         scroll.backgroundColor = .textBackgroundColor
         scroll.contentView.postsBoundsChangedNotifications = false
+        // Room for the floating word-count pill at the end of the document.
+        scroll.automaticallyAdjustsContentInsets = true
+        scroll.contentInsets.bottom = 44
 
         let coordinator = context.coordinator
         coordinator.textView = textView
+        coordinator.highlighter.imageProvider = { [weak coordinator] src in
+            ImageStore.shared.image(for: src, relativeTo: coordinator?.parent.baseURL)
+        }
+        textView.onColumnWidthChange = { [weak coordinator] width in
+            coordinator?.columnWidthChanged(width)
+        }
         coordinator.apply(style: style)
         textView.string = text
         textView.setSelectedRange(NSRange(location: 0, length: 0))
@@ -84,7 +94,31 @@ struct EditorView: NSViewRepresentable {
         private var lastActive: NSRange?
         private var highlighting = false
 
-        init(_ parent: EditorView) { self.parent = parent }
+        private var imageObserver: NSObjectProtocol?
+        private var pendingWidthWork: DispatchWorkItem?
+
+        init(_ parent: EditorView) {
+            self.parent = parent
+            super.init()
+            imageObserver = NotificationCenter.default.addObserver(forName: .marklyImageLoaded, object: nil, queue: .main) { [weak self] _ in
+                self?.rehighlight()
+            }
+        }
+
+        deinit {
+            if let imageObserver { NotificationCenter.default.removeObserver(imageObserver) }
+        }
+
+        private var hasImages: Bool { textView?.string.contains("![") ?? false }
+
+        func columnWidthChanged(_ width: CGFloat) {
+            highlighter.columnWidth = width
+            guard style.imagePreview != .off, hasImages else { return }
+            pendingWidthWork?.cancel()
+            let work = DispatchWorkItem { [weak self] in self?.rehighlight() }
+            pendingWidthWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
+        }
 
         func apply(style: EditorStyle) {
             self.style = style
@@ -114,6 +148,14 @@ struct EditorView: NSViewRepresentable {
             highlighter.highlight(storage, active: active)
             tv.typingAttributes = highlighter.typingAttributes
             tv.needsDisplay = true
+        }
+
+        /// Don't flag spelling inside collapsed (hidden) Markdown syntax.
+        func textView(_ textView: NSTextView, shouldSetSpellingState value: Int, range: NSRange) -> Int {
+            guard value != 0, let storage = textView.textStorage, range.location < storage.length,
+                  let font = storage.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont,
+                  font.pointSize < 1 else { return value }
+            return 0
         }
 
         func textDidChange(_ notification: Notification) {

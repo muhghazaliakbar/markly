@@ -29,8 +29,12 @@ final class Workspace: ObservableObject {
     static let markdownExtensions: Set<String> = ["md", "markdown", "mdown", "mkd", "mdx", "txt"]
     static let ignoredFolders: Set<String> = ["node_modules", ".git", ".build", "DerivedData", "Pods"]
 
-    @Published private(set) var rootURL: URL?
-    @Published private(set) var tree: [FileNode] = []
+    /// Folders shown in the sidebar, in order.
+    @Published private(set) var roots: [URL] = []
+    @Published private(set) var trees: [URL: [FileNode]] = [:]
+    @Published var collapsed: Set<URL> = [] {
+        didSet { defaults.set(collapsed.map(\.path), forKey: "collapsedRoots") }
+    }
     @Published var selection: URL? {
         didSet { if selection != oldValue, let s = selection { open(s) } }
     }
@@ -40,29 +44,27 @@ final class Workspace: ObservableObject {
     }
     @Published private(set) var isDirty = false
     @Published var showPreview = UserDefaults.standard.bool(forKey: "showPreview") {
-        didSet { UserDefaults.standard.set(showPreview, forKey: "showPreview") }
+        didSet { defaults.set(showPreview, forKey: "showPreview") }
+    }
+    @Published var showInspector = UserDefaults.standard.object(forKey: "showInspector") as? Bool ?? true {
+        didSet { defaults.set(showInspector, forKey: "showInspector") }
     }
     @Published var focusMode = false
     @Published var errorMessage: String?
 
-    @AppStorage("recentFolders") private var recentData: Data = Data()
-    @AppStorage("lastFile") private var lastFile: String = ""
-
+    private let defaults = UserDefaults.standard
     private var loading = false
     private var saveTask: Task<Void, Never>?
     private var loadedModDate: Date?
 
-    var recentFolders: [URL] {
-        ((try? JSONDecoder().decode([String].self, from: recentData)) ?? []).map { URL(fileURLWithPath: $0) }
-    }
-
     init() {
-        if let last = recentFolders.first, FileManager.default.fileExists(atPath: last.path) {
-            openFolder(last)
-            if !lastFile.isEmpty, FileManager.default.fileExists(atPath: lastFile),
-               lastFile.hasPrefix(last.path) {
-                selection = URL(fileURLWithPath: lastFile)
-            }
+        let saved = (defaults.stringArray(forKey: "roots") ?? []).map { URL(fileURLWithPath: $0) }
+        roots = saved.filter { FileManager.default.fileExists(atPath: $0.path) }
+        collapsed = Set((defaults.stringArray(forKey: "collapsedRoots") ?? []).map { URL(fileURLWithPath: $0) })
+        refresh()
+        if let last = defaults.string(forKey: "lastFile"), FileManager.default.fileExists(atPath: last),
+           root(containing: URL(fileURLWithPath: last)) != nil {
+            selection = URL(fileURLWithPath: last)
         }
         NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.checkForExternalChanges() }
@@ -72,34 +74,60 @@ final class Workspace: ObservableObject {
         }
     }
 
-    // MARK: Folder
+    // MARK: Folders
 
-    func openFolder(_ url: URL) {
-        save()
-        rootURL = url
-        currentURL = nil
-        loading = true
-        text = ""
-        loading = false
-        selection = nil
-        var recents = recentFolders.map(\.path).filter { $0 != url.path }
-        recents.insert(url.path, at: 0)
-        recentData = (try? JSONEncoder().encode(Array(recents.prefix(8)))) ?? Data()
+    var hasFolders: Bool { !roots.isEmpty }
+
+    func root(containing url: URL) -> URL? {
+        roots.first { url.path == $0.path || url.path.hasPrefix($0.path + "/") }
+    }
+
+    /// The first nine files in sidebar order, reachable with ⌘1–⌘9.
+    var quickFiles: [URL] {
+        Array(roots.filter { !collapsed.contains($0) }
+            .flatMap { (trees[$0] ?? []).flatMap(\.allFiles) }
+            .prefix(9).map(\.url))
+    }
+
+    var allFiles: [FileNode] { roots.flatMap { (trees[$0] ?? []).flatMap(\.allFiles) } }
+
+    func addFolder(_ url: URL) {
+        let url = url.standardizedFileURL
+        if !roots.contains(url) {
+            roots.append(url)
+            persistRoots()
+        }
+        collapsed.remove(url)
         refresh()
     }
 
-    func closeFolder() {
+    func removeFolder(_ url: URL) {
+        if let current = currentURL, root(containing: current) == url { closeCurrentFile() }
+        roots.removeAll { $0 == url }
+        trees[url] = nil
+        collapsed.remove(url)
+        persistRoots()
+    }
+
+    func toggleCollapsed(_ url: URL) {
+        if collapsed.contains(url) { collapsed.remove(url) } else { collapsed.insert(url) }
+    }
+
+    private func persistRoots() {
+        defaults.set(roots.map(\.path), forKey: "roots")
+    }
+
+    private func closeCurrentFile() {
         save()
-        rootURL = nil
-        tree = []
-        selection = nil
         currentURL = nil
+        selection = nil
         loading = true; text = ""; loading = false
     }
 
     func refresh() {
-        guard let root = rootURL else { return }
-        tree = Self.scan(root)
+        var result: [URL: [FileNode]] = [:]
+        for root in roots { result[root] = Self.scan(root) }
+        trees = result
     }
 
     private static func scan(_ dir: URL) -> [FileNode] {
@@ -126,12 +154,8 @@ final class Workspace: ObservableObject {
 
     func openFile(_ url: URL) {
         let url = url.standardizedFileURL
-        if let root = rootURL, url.path.hasPrefix(root.path + "/") {
-            selection = url
-        } else {
-            openFolder(url.deletingLastPathComponent())
-            selection = url
-        }
+        if root(containing: url) == nil { addFolder(url.deletingLastPathComponent()) }
+        selection = url
     }
 
     private func open(_ url: URL) {
@@ -146,7 +170,7 @@ final class Workspace: ObservableObject {
             loading = false
             isDirty = false
             loadedModDate = modDate(url)
-            lastFile = url.path
+            defaults.set(url.path, forKey: "lastFile")
         } catch {
             errorMessage = "Couldn't open \(url.lastPathComponent): \(error.localizedDescription)"
         }
@@ -198,7 +222,7 @@ final class Workspace: ObservableObject {
     func folderForNewItem(near node: FileNode? = nil) -> URL? {
         if let node { return node.isDirectory ? node.url : node.url.deletingLastPathComponent() }
         if let current = currentURL { return current.deletingLastPathComponent() }
-        return rootURL
+        return roots.first
     }
 
     private func uniqueURL(in folder: URL, base: String, ext: String?) -> URL {
@@ -307,9 +331,10 @@ final class Workspace: ObservableObject {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
-        panel.prompt = "Open Folder"
-        panel.message = "Choose a folder of Markdown files"
-        if panel.runModal() == .OK, let url = panel.url { openFolder(url) }
+        panel.allowsMultipleSelection = true
+        panel.prompt = "Add Folder"
+        panel.message = "Choose folders of Markdown files to show in the sidebar"
+        if panel.runModal() == .OK { panel.urls.forEach(addFolder) }
     }
 
     func showOpenFilePanel() {

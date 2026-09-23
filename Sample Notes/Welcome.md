@@ -2,6 +2,8 @@
 
 Markly is a **native**, *open-source* Markdown editor. Syntax like `**` and `#` fades away when you're not editing that line — click into a line to see it.
 
+![Markly icon](images/markly.png)
+
 ## What works
 
 - [x] Live styling for **bold**, *italic*, ~~strikethrough~~ and ==highlights==

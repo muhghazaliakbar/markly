@@ -43,6 +43,23 @@ final class MarkdownLayoutManager: NSLayoutManager {
             }
         }
 
+        storage.enumerateAttribute(.mdImage, in: chars) { value, range, _ in
+            guard let box = value as? ImageBox else { return }
+            let glyphs = glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            guard glyphs.length > 0 else { return }
+            let used = lineFragmentUsedRect(forGlyphAt: NSMaxRange(glyphs) - 1, effectiveRange: nil)
+            let rect = NSRect(x: origin.x + container.lineFragmentPadding, y: origin.y + used.maxY + 8,
+                              width: box.size.width, height: box.size.height)
+            NSGraphicsContext.saveGraphicsState()
+            let clip = NSBezierPath(roundedRect: rect, xRadius: 10, yRadius: 10)
+            clip.addClip()
+            box.image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            NSGraphicsContext.restoreGraphicsState()
+            NSColor.separatorColor.setStroke()
+            clip.lineWidth = 1
+            clip.stroke()
+        }
+
         storage.enumerateAttribute(.mdRule, in: chars) { value, range, _ in
             guard value != nil else { return }
             let rect = blockRect(range)
@@ -64,6 +81,12 @@ final class MarkdownLayoutManager: NSLayoutManager {
 final class MarkdownTextView: NSTextView {
     var maxContentWidth: CGFloat = 720 { didSet { updateInsets() } }
     var onOpenLink: ((String) -> Void)?
+    var onColumnWidthChange: ((CGFloat) -> Void)?
+    private var lastColumnWidth: CGFloat = 0
+
+    var columnWidth: CGFloat {
+        (textContainer?.size.width ?? bounds.width) - 2 * (textContainer?.lineFragmentPadding ?? 5)
+    }
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
@@ -74,6 +97,11 @@ final class MarkdownTextView: NSTextView {
         let horizontal = max(28, (bounds.width - maxContentWidth) / 2)
         let inset = NSSize(width: horizontal.rounded(), height: 36)
         if textContainerInset != inset { textContainerInset = inset }
+        let width = columnWidth
+        if abs(width - lastColumnWidth) > 1 {
+            lastColumnWidth = width
+            onColumnWidthChange?(width)
+        }
     }
 
     // MARK: Mouse: task checkboxes and ⌘-click links

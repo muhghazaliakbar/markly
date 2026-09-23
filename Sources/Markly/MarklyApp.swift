@@ -11,13 +11,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        guard let url = urls.first else { return }
         Task { @MainActor in
-            var isDir: ObjCBool = false
-            if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
-                workspace?.openFolder(url)
-            } else {
-                workspace?.openFile(url)
+            for url in urls {
+                var isDir: ObjCBool = false
+                if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
+                    workspace?.addFolder(url)
+                } else {
+                    workspace?.openFile(url)
+                }
             }
         }
     }
@@ -37,12 +38,9 @@ struct MarklyApp: App {
                 .frame(minWidth: 640, minHeight: 420)
                 .onAppear { delegate.workspace = workspace }
         }
-        .defaultSize(width: 1100, height: 760)
+        .defaultSize(width: 1240, height: 800)
+        .windowToolbarStyle(.unified(showsTitle: false))
         .commands { MarklyCommands(workspace: workspace) }
-
-        Settings {
-            SettingsView()
-        }
     }
 }
 
@@ -59,22 +57,19 @@ struct MarklyCommands: Commands {
         CommandGroup(replacing: .newItem) {
             Button("New File") { workspace.newFile() }
                 .keyboardShortcut("n")
-                .disabled(workspace.rootURL == nil)
+                .disabled(!workspace.hasFolders)
             Button("New Folder") { workspace.newFolder() }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
-                .disabled(workspace.rootURL == nil)
+                .disabled(!workspace.hasFolders)
             Divider()
-            Button("Open Folder…") { workspace.showOpenFolderPanel() }
+            Button("Add Folder…") { workspace.showOpenFolderPanel() }
                 .keyboardShortcut("o")
             Button("Open File…") { workspace.showOpenFilePanel() }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
-            Menu("Open Recent") {
-                ForEach(workspace.recentFolders, id: \.self) { url in
-                    Button(url.lastPathComponent) { workspace.openFolder(url) }
-                }
-            }
-            Button("Close Folder") { workspace.closeFolder() }
-                .disabled(workspace.rootURL == nil)
+        }
+        CommandGroup(replacing: .appSettings) {
+            Button("Appearance…") { withAnimation(GlassStyle.spring) { workspace.showInspector.toggle() } }
+                .keyboardShortcut(",")
         }
         CommandGroup(replacing: .saveItem) {
             Button("Save") { workspace.save() }
@@ -104,10 +99,10 @@ struct MarklyCommands: Commands {
             Button("Inline Code") { send(#selector(MarkdownTextView.toggleInlineCode(_:))) }.keyboardShortcut("e")
             Button("Link") { send(#selector(MarkdownTextView.insertLink(_:))) }.keyboardShortcut("k")
             Divider()
-            Button("Heading 1") { send(#selector(MarkdownTextView.heading1(_:))) }.keyboardShortcut("1")
-            Button("Heading 2") { send(#selector(MarkdownTextView.heading2(_:))) }.keyboardShortcut("2")
-            Button("Heading 3") { send(#selector(MarkdownTextView.heading3(_:))) }.keyboardShortcut("3")
-            Button("Heading 4") { send(#selector(MarkdownTextView.heading4(_:))) }.keyboardShortcut("4")
+            Button("Heading 1") { send(#selector(MarkdownTextView.heading1(_:))) }.keyboardShortcut("1", modifiers: [.command, .option])
+            Button("Heading 2") { send(#selector(MarkdownTextView.heading2(_:))) }.keyboardShortcut("2", modifiers: [.command, .option])
+            Button("Heading 3") { send(#selector(MarkdownTextView.heading3(_:))) }.keyboardShortcut("3", modifiers: [.command, .option])
+            Button("Heading 4") { send(#selector(MarkdownTextView.heading4(_:))) }.keyboardShortcut("4", modifiers: [.command, .option])
             Button("Body Text") { send(#selector(MarkdownTextView.bodyText(_:))) }.keyboardShortcut("0", modifiers: [.command, .option])
             Divider()
             Button("Bulleted List") { send(#selector(MarkdownTextView.toggleBulletList(_:))) }.keyboardShortcut("8", modifiers: [.command, .shift])
@@ -130,6 +125,17 @@ struct MarklyCommands: Commands {
             Button("Smaller Text") { fontSize = max(11, fontSize - 1) }.keyboardShortcut("-")
             Button("Actual Size") { fontSize = 16 }.keyboardShortcut("0")
             Divider()
+        }
+
+        CommandMenu("Go") {
+            let files = workspace.quickFiles
+            if files.isEmpty {
+                Text("No notes")
+            }
+            ForEach(Array(files.enumerated()), id: \.element) { i, url in
+                Button(url.deletingPathExtension().lastPathComponent) { workspace.selection = url }
+                    .keyboardShortcut(KeyEquivalent(Character("\(i + 1)")), modifiers: .command)
+            }
         }
     }
 }

@@ -1,9 +1,9 @@
-// swift-tools-version:5.10
+// swift-tools-version:6.2
 import PackageDescription
 
 let package = Package(
     name: "Markly",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v26)],
     products: [
         .executable(name: "Markly", targets: ["Markly"])
     ],
@@ -23,5 +23,6 @@ let package = Package(
             dependencies: ["Markly"],
             path: "Tests/MarklyTests"
         )
-    ]
+    ],
+    swiftLanguageModes: [.v5]
 )

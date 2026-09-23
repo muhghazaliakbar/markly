@@ -12,6 +12,14 @@ enum FontChoice: String, CaseIterable, Identifiable {
         }
     }
 
+    var design: Font.Design {
+        switch self {
+        case .sans: .default
+        case .serif: .serif
+        case .mono: .monospaced
+        }
+    }
+
     func font(size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
         switch self {
         case .sans:
@@ -29,20 +37,73 @@ enum FontChoice: String, CaseIterable, Identifiable {
 }
 
 enum SyntaxVisibility: String, CaseIterable, Identifiable {
-    case focused, always
+    case always, focused, hidden
     var id: Self { self }
     var label: String {
         switch self {
-        case .focused: "Hide except on current line"
-        case .always: "Always show"
+        case .always: "Show"
+        case .focused: "Auto"
+        case .hidden: "Hide"
+        }
+    }
+    var icon: String {
+        switch self {
+        case .always: "eye"
+        case .focused: "character.cursor.ibeam"
+        case .hidden: "eye.slash"
+        }
+    }
+    var help: String {
+        switch self {
+        case .always: "Always show Markdown syntax"
+        case .focused: "Show syntax only on the line you're editing"
+        case .hidden: "Never show Markdown syntax"
         }
     }
 }
 
+enum ImagePreview: String, CaseIterable, Identifiable {
+    case off, small, medium, large
+    var id: Self { self }
+    var label: String { self == .off ? "Off" : rawValue.capitalized }
+    /// Fraction of the text column an image may occupy.
+    var fraction: CGFloat {
+        switch self {
+        case .off: 0
+        case .small: 0.4
+        case .medium: 0.7
+        case .large: 1
+        }
+    }
+}
+
+enum TextSize: Double, CaseIterable, Identifiable {
+    case small = 14, medium = 16, large = 18, huge = 21
+    var id: Self { self }
+    var label: String {
+        switch self {
+        case .small: "Small"
+        case .medium: "Medium"
+        case .large: "Large"
+        case .huge: "Extra Large"
+        }
+    }
+    static func nearest(_ v: Double) -> TextSize {
+        allCases.min { abs($0.rawValue - v) < abs($1.rawValue - v) } ?? .medium
+    }
+}
+
 enum AppTheme: String, CaseIterable, Identifiable {
-    case system, light, dark
+    case light, dark, system
     var id: Self { self }
     var label: String { rawValue.capitalized }
+    var icon: String {
+        switch self {
+        case .light: "sun.max"
+        case .dark: "moon"
+        case .system: "circle.lefthalf.filled"
+        }
+    }
 
     func apply() {
         switch self {
@@ -75,6 +136,15 @@ enum AccentChoice: String, CaseIterable, Identifiable {
     var color: Color { Color(nsColor: nsColor) }
 }
 
+extension CaseIterable where Self: Equatable, AllCases: BidirectionalCollection, AllCases.Index == Int {
+    var next: Self {
+        let all = Self.allCases
+        let i = all.firstIndex(of: self) ?? 0
+        return all[(i + 1) % all.count]
+    }
+    var index: Int { Self.allCases.firstIndex(of: self) ?? 0 }
+}
+
 /// Keys for `@AppStorage`, kept in one place.
 enum Pref {
     static let font = "font"
@@ -86,6 +156,7 @@ enum Pref {
     static let accent = "accent"
     static let spellCheck = "spellCheck"
     static let showStatusBar = "showStatusBar"
+    static let imagePreview = "imagePreview"
 }
 
 /// Everything the text view needs to know to style the document.
@@ -97,4 +168,5 @@ struct EditorStyle: Equatable {
     var syntax: SyntaxVisibility = .focused
     var accent: AccentChoice = .system
     var spellCheck: Bool = true
+    var imagePreview: ImagePreview = .medium
 }

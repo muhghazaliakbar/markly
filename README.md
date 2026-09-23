@@ -2,18 +2,20 @@
 
 A calm, native, open-source Markdown editor for macOS. Point it at any folder and it edits your `.md` files in place: no import, no database, no lock-in.
 
-Built with SwiftUI and AppKit (TextKit). No Electron.
+Built with SwiftUI and AppKit (TextKit) and Apple's native **Liquid Glass** design. No Electron.
 
 ## Features
 
 - **Live styling.** Headings, bold, italic, strikethrough, `==highlights==`, links, inline code, code blocks, quotes, tables, math and task lists render as you type.
-- **Syntax that gets out of the way.** Markers like `**` and `#` collapse on lines you aren't editing and reappear when the caret moves there. You can also choose to always show them.
-- **Folders, not libraries.** Open any folder, browse nested notes in the sidebar, filter by name, and create, rename, reveal or trash files. Changes save automatically to the original file, and files edited elsewhere (git, other editors) reload on their own.
+- **Syntax that gets out of the way.** Markers like `**` and `#` collapse on lines you aren't editing and reappear when the caret moves there. You can also choose to always show them, or never show them.
+- **Folders, not libraries.** Add as many folders as you like to the sidebar, browse nested notes, filter by name (⇧⌘L), and create, rename, reveal or trash files. Jump to the first nine notes with ⌘1–⌘9. Changes save automatically to the original file, and files edited elsewhere (git, other editors) reload on their own.
+- **Liquid Glass appearance panel** (⌘,). Switch theme, text size, image previews, typeface and syntax visibility, and set line spacing and editor width with tick sliders, all from a floating glass panel.
+- **Inline image previews.** An image on its own line is drawn right in the editor at small, medium or full width.
+- **Git sync.** See the branch and pending changes for the note's folder. One click commits everything, pulls (rebase) and pushes; you can also initialize a new repository.
 - **Clickable tasks.** Click `[ ]` to check it off. ⌘-click a link to open it; relative `.md` links open inside the editor.
 - **Smart lists.** Return continues a list (numbers go up, checkboxes reset), Return on an empty item ends it, and Tab / ⇧Tab indent.
 - **Preview pane** (⌥⌘P) with GitHub-style rendering, KaTeX math and syntax highlighting.
 - **Export** to HTML or PDF, or print.
-- **Typography controls.** Sans, serif or mono font, plus text size, line spacing and editor width.
 - **Appearance.** Light, dark or system theme, and the macOS accent color or one of your own.
 - **Focus mode** (⇧⌘F) hides everything but the page.
 
@@ -21,7 +23,7 @@ Built with SwiftUI and AppKit (TextKit). No Electron.
 
 | Action | Shortcut | Action | Shortcut |
 | --- | --- | --- | --- |
-| Bold | ⌘B | Heading 1–4 | ⌘1–⌘4 |
+| Bold | ⌘B | Heading 1–4 | ⌥⌘1–⌥⌘4 |
 | Italic | ⌘I | Body text | ⌥⌘0 |
 | Strikethrough | ⇧⌘X | Bulleted list | ⇧⌘8 |
 | Highlight | ⇧⌘H | Numbered list | ⇧⌘7 |
@@ -29,11 +31,12 @@ Built with SwiftUI and AppKit (TextKit). No Electron.
 | Link | ⌘K | Quote | ⌘' |
 | Code block | ⌥⌘C | Table | ⌥⌘T |
 | Preview | ⌥⌘P | Focus mode | ⇧⌘F |
-| Bigger / smaller text | ⌘+ / ⌘- | Open folder | ⌘O |
+| Bigger / smaller text | ⌘+ / ⌘- | Add folder | ⌘O |
+| Open note 1–9 | ⌘1–⌘9 | Appearance panel | ⌘, |
 
 ## Building
 
-Requires macOS 14+ and Xcode 15+ (Swift 5.10).
+Requires macOS 26 (Tahoe) or later and Xcode 26+, because the interface uses the Liquid Glass APIs (`glassEffect`, `GlassEffectContainer`, glass button styles).
 
 ```bash
 scripts/build-app.sh            # builds build/Markly.app (universal, ad-hoc signed)
@@ -52,15 +55,18 @@ For development, open `Package.swift` in Xcode and run the `Markly` scheme, or u
 | `MarkdownTextView.swift` | Editor text view (formatting actions, list behavior) and layout manager (block decorations) |
 | `MarkdownHighlighter.swift` | Live Markdown styling and syntax hiding |
 | `MarkdownRenderer.swift` / `PreviewView.swift` | HTML rendering, preview pane, export and printing |
-| `SidebarView.swift`, `ContentView.swift`, `SettingsView.swift` | UI |
+| `GlassControls.swift` | Liquid Glass building blocks: segmented picker, tiles, tick slider, chips |
+| `InspectorPanel.swift` | Floating appearance panel, Git card, shortcuts sheet |
+| `GitService.swift` | Git status and sync through `/usr/bin/git` |
+| `ImageStore.swift` | Loads and caches inline image previews |
+| `SidebarView.swift`, `ContentView.swift` | Window layout and sidebar |
 
 HTML rendering uses [swift-markdown](https://github.com/swiftlang/swift-markdown) (GitHub-flavored Markdown). The preview loads KaTeX and highlight.js from jsdelivr, so math and code coloring in the preview need a network connection. The editor itself works fully offline.
 
 ## Roadmap ideas
 
-- Git sync and publish
 - Pasting and dragging images into a folder next to the note
-- Inline image previews in the editor
+- GitHub sign-in and repository creation
 - Outline / table-of-contents panel
 - Full-text search across the folder
 
