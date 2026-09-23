@@ -95,33 +95,70 @@ enum MarkdownRenderer {
     </script>
     """
 
-    /// Scrolls so the given 1-based source line sits `ratio` of the way down the window (mirroring the editor).
-    /// Inside long blocks (lists, code) the position is interpolated line by line.
+    /// Keeps the preview on the part of the note the editor is showing.
+    ///
+    /// `pos` is a fractional 1-based source line (12.4 = 40% of the way through line 12, which matters for
+    /// long wrapped paragraphs); `ratio` is where that spot sits in the editor's viewport. The page doesn't jump
+    /// there: a requestAnimationFrame follower eases toward the target every display frame with a
+    /// frame-rate–independent exponential curve, so continuous scrolling tracks smoothly and jumps glide.
+    /// Scrolling the preview by hand hands control back to the reader until the editor moves again.
     static let syncScript = """
-    function __syncLine(line, ratio, smooth) {
+    let __syncTarget = null, __syncFrame = 0, __syncLast = 0, __syncGlide = false;
+    function __syncDest(pos, ratio) {
       const blocks = document.querySelectorAll("#content > [data-line]");
-      if (!blocks.length) return;
+      if (!blocks.length) return 0;
       let cur = null, next = null;
       for (const el of blocks) {
-        if (+el.dataset.line <= line) cur = el; else { next = el; break; }
+        if (+el.dataset.line <= pos) cur = el; else { next = el; break; }
       }
       let y = 0;
       if (cur) {
-        const start = +cur.dataset.line, end = Math.max(start, +cur.dataset.end);
+        const start = +cur.dataset.line, end = Math.max(start, +cur.dataset.end) + 1;  // block covers [start, end)
         const top = cur.getBoundingClientRect().top + window.scrollY, h = cur.offsetHeight;
-        if (line > end && next) {
+        if (pos >= end && next) {
           const nextTop = next.getBoundingClientRect().top + window.scrollY;
-          y = top + h + (nextTop - top - h) * Math.min(1, (line - end) / Math.max(1, +next.dataset.line - end));
+          y = top + h + (nextTop - top - h) * Math.min(1, (pos - end) / Math.max(1, +next.dataset.line - end));
         } else {
-          y = top + h * Math.min(1, (line - start) / (end - start + 1));
+          y = top + h * Math.min(1, (pos - start) / (end - start));
         }
       }
       // At (or above) the start of the first block, show the very top of the page, padding included.
       const firstTop = blocks[0].getBoundingClientRect().top + window.scrollY;
-      const dest = y <= firstTop + 0.5 ? 0 : Math.max(0, y - ratio * window.innerHeight);
-      if (Math.abs(dest - window.scrollY) < 1) return;
-      window.scrollTo({ top: dest, behavior: smooth ? "smooth" : "instant" });
+      if (y <= firstTop + 0.5) return 0;
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      return Math.min(Math.max(0, y - ratio * window.innerHeight), Math.max(0, max));
     }
+    function __syncStep(now) {
+      const dt = Math.min(50, now - __syncLast);
+      __syncLast = now;
+      const current = window.scrollY, diff = __syncTarget - current;
+      if (Math.abs(diff) < 0.5) {
+        window.scrollTo(0, __syncTarget);
+        __syncFrame = 0;
+        return;
+      }
+      const tau = __syncGlide ? 110 : 55;  // ms: gentle glide for jumps, tight follow while scrolling
+      window.scrollTo(0, current + diff * (1 - Math.exp(-dt / tau)));
+      __syncFrame = requestAnimationFrame(__syncStep);
+    }
+    function __syncLine(pos, ratio, glide, immediate) {
+      __syncTarget = __syncDest(pos, ratio);
+      __syncGlide = glide;
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (immediate || reduce || document.hidden) {
+        if (__syncFrame) { cancelAnimationFrame(__syncFrame); __syncFrame = 0; }
+        window.scrollTo(0, __syncTarget);
+        return;
+      }
+      if (!__syncFrame) {
+        __syncLast = performance.now();
+        __syncFrame = requestAnimationFrame(__syncStep);
+      }
+    }
+    // The reader scrolling the preview themselves wins over the follower.
+    window.addEventListener("wheel", () => {
+      if (__syncFrame) { cancelAnimationFrame(__syncFrame); __syncFrame = 0; }
+    }, { passive: true });
     """
 
     /// Switches the page to another note without reloading, with the same motion as the editor: the old page

@@ -190,10 +190,22 @@ struct EditorView: NSViewRepresentable {
                 location = ns.length == 0 ? 0 : lm.characterIndexForGlyph(at: lm.glyphIndex(for: point, in: tc))
                 y = visible.minY
             }
-            let line = lineIndex(at: location) + 1
+            let index = lineIndex(at: location)
+            // How far into this source line the anchor is: a long paragraph is one source line wrapped over
+            // many screen lines, and without this the preview would sit still, then jump a whole paragraph.
+            var fraction = 0.0
+            if ns.length > 0 {
+                let start = lineStarts[index]
+                let end = index + 1 < lineStarts.count ? lineStarts[index + 1] : ns.length
+                let glyphs = lm.glyphRange(forCharacterRange: NSRange(location: start, length: max(1, min(end, ns.length) - start)),
+                                           actualCharacterRange: nil)
+                let rect = lm.boundingRect(forGlyphRange: glyphs, in: tc).offsetBy(dx: origin.x, dy: origin.y)
+                if rect.height > 1 { fraction = min(max(Double((y - rect.minY) / rect.height), 0), 0.999) }
+            }
+            let line = index + 1
             let glide = smooth ?? (lastReportedLine >= 0 && abs(line - lastReportedLine) > 1)
             lastReportedLine = line
-            sync.editorMoved(line: line, ratio: Double((y - visible.minY) / visible.height), smooth: glide)
+            sync.editorMoved(position: Double(line) + fraction, ratio: Double((y - visible.minY) / visible.height), smooth: glide)
         }
         private var pendingStyle: EditorStyle?
 

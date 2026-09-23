@@ -32,8 +32,8 @@ struct PreviewView: NSViewRepresentable {
     func updateNSView(_ web: WKWebView, context: Context) {
         if let sync = scrollSync, context.coordinator.sync !== sync {
             context.coordinator.sync = sync
-            sync.toPreview = { [weak web] line, ratio, smooth in
-                web?.evaluateJavaScript("__syncLine(\(line), \(ratio), \(smooth))")
+            sync.toPreview = { [weak web] position, ratio, glide, immediate in
+                web?.evaluateJavaScript("__syncLine(\(position), \(ratio), \(glide), \(immediate))")
             }
         }
         context.coordinator.schedule(web: web, markdown: markdown, fileURL: fileURL, accent: accent.hexString + reloadKey,

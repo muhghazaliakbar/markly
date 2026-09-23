@@ -323,23 +323,33 @@ final class EditorTests: XCTestCase {
             if let failure { throw failure }
             return result
         }
-        _ = try eval("__syncLine(81, 0, false)")        // paragraph 41 (line 81) at the top
+        _ = try eval("__syncLine(81, 0, false, true)")        // paragraph 41 (line 81) at the top
         let middle = try XCTUnwrap(eval("window.scrollY") as? Double)
-        _ = try eval("__syncLine(141, 0, false)")       // paragraph 71
+        _ = try eval("__syncLine(141, 0, false, true)")       // paragraph 71
         let later = try XCTUnwrap(eval("window.scrollY") as? Double)
-        _ = try eval("__syncLine(1, 0, false)")
+        _ = try eval("__syncLine(1, 0, false, true)")
         let top = try XCTUnwrap(eval("window.scrollY") as? Double)
         XCTAssertGreaterThan(middle, 0)
         XCTAssertGreaterThan(later, middle)
         XCTAssertEqual(top, 0)
         // The block for line 81 is at the top of the viewport.
         let offset = try XCTUnwrap(eval("document.querySelector('[data-line=\"81\"]').getBoundingClientRect().top") as? Double)
-        _ = try eval("__syncLine(81, 0, false)")
+        _ = try eval("__syncLine(81, 0, false, true)")
         let frame = expectation(description: "scroll applied")  // WebKit applies the scroll on the next frame
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { frame.fulfill() }
         wait(for: [frame], timeout: 2)
         let aligned = try XCTUnwrap(eval("document.querySelector('[data-line=\"81\"]').getBoundingClientRect().top") as? Double)
         XCTAssertEqual(aligned, 0, accuracy: 1.5, "was \(offset) before syncing")
+
+        // Fractional positions land in between, so scrolling is continuous rather than block by block.
+        _ = try eval("__syncLine(81, 0, false, true)")
+        let at81 = try XCTUnwrap(eval("window.scrollY") as? Double)
+        _ = try eval("__syncLine(83, 0, false, true)")
+        let at83 = try XCTUnwrap(eval("window.scrollY") as? Double)
+        _ = try eval("__syncLine(82, 0, false, true)")
+        let between = try XCTUnwrap(eval("window.scrollY") as? Double)
+        XCTAssertGreaterThan(between, at81)
+        XCTAssertLessThan(between, at83)
         withExtendedLifetime(nav) {}
     }
 
@@ -356,8 +366,8 @@ final class EditorTests: XCTestCase {
         coordinator.textView = tv
         let sync = ScrollSync()
         coordinator.scrollSync = sync
-        var reported: Int?
-        sync.toPreview = { line, _, _ in reported = line }
+        var reported: Double?
+        sync.toPreview = { position, _, _, _ in reported = position }
 
         // Line height of the first line tells us where line 101 starts.
         let lm = tv.layoutManager!
@@ -372,6 +382,41 @@ final class EditorTests: XCTestCase {
         wait(for: [flushed], timeout: 1)
         let line = try? XCTUnwrap(reported)
         XCTAssertNotNil(line)
-        XCTAssertEqual(Double(line ?? 0), 101, accuracy: 1, "caret is off screen, so the top visible line is reported")
+        XCTAssertEqual(line ?? 0, 101, accuracy: 1, "caret is off screen, so the top visible line is reported")
+    }
+
+    /// Inside one long wrapped paragraph (a single source line), the reported position moves continuously.
+    func testEditorReportsFractionWithinLongParagraph() {
+        let long = String(repeating: "A long paragraph that wraps across many screen lines. ", count: 120)
+        let text = (1...20).map { "Line \($0)" }.joined(separator: "\n") + "\n" + long + "\n" + (22...60).map { "Line \($0)" }.joined(separator: "\n")
+        let view = EditorView(text: .constant(text), style: EditorStyle())
+        let coordinator = view.makeCoordinator()
+        let tv = makeEditor(text, select: NSRange(location: 0, length: 0))
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 600, height: 300))
+        scroll.documentView = tv
+        tv.frame.size.width = 600
+        tv.sizeToFit()
+        coordinator.textView = tv
+        let sync = ScrollSync()
+        coordinator.scrollSync = sync
+        var reported: [Double] = []
+        sync.toPreview = { position, _, _, _ in reported.append(position) }
+
+        let lm = tv.layoutManager!, tc = tv.textContainer!
+        let ns = tv.string as NSString
+        let paragraph = lm.boundingRect(forGlyphRange: lm.glyphRange(forCharacterRange: ns.range(of: long), actualCharacterRange: nil), in: tc)
+        for fraction in [0.25, 0.5, 0.75] {
+            let y = tv.textContainerOrigin.y + paragraph.minY + paragraph.height * fraction
+            scroll.contentView.scroll(to: NSPoint(x: 0, y: y))
+            scroll.reflectScrolledClipView(scroll.contentView)
+            coordinator.reportPosition(smooth: false)
+            let flushed = expectation(description: "flushed \(fraction)")
+            DispatchQueue.main.async { flushed.fulfill() }
+            wait(for: [flushed], timeout: 1)
+        }
+        XCTAssertEqual(reported.count, 3)
+        for (value, expected) in zip(reported, [21.25, 21.5, 21.75]) {
+            XCTAssertEqual(value, expected, accuracy: 0.05, "position inside the paragraph on line 21")
+        }
     }
 }
