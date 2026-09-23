@@ -4,7 +4,15 @@ import SwiftUI
 enum GlassStyle {
     static let cardRadius: CGFloat = 22
     static var card: RoundedRectangle { RoundedRectangle(cornerRadius: cardRadius, style: .continuous) }
-    static let spring = Animation.spring(response: 0.38, dampingFraction: 0.78)
+
+    static var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+
+    /// Layout changes: panels, sidebar, sections. The system's critically damped "smooth" spring.
+    static var spring: Animation { reduceMotion ? .easeInOut(duration: 0.18) : .smooth(duration: 0.34) }
+    /// Direct manipulation of controls: pills, tiles, chips.
+    static var snappy: Animation { reduceMotion ? .easeInOut(duration: 0.12) : .snappy(duration: 0.24) }
+    /// Content swaps such as switching notes.
+    static var fade: Animation { .easeInOut(duration: reduceMotion ? 0.1 : 0.18) }
 
     static func tick() {
         NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
@@ -36,13 +44,13 @@ struct GlassSegmented<Value: Hashable>: View {
                 let selected = option.value == selection
                 Button {
                     guard !selected else { return }
-                    withAnimation(GlassStyle.spring) { selection = option.value }
+                    withAnimation(GlassStyle.snappy) { selection = option.value }
                     GlassStyle.tick()
                 } label: {
                     VStack(spacing: 3) {
                         Image(systemName: option.icon)
                             .font(.system(size: 14, weight: .semibold))
-                            .symbolEffect(.bounce, value: selected)
+                            .symbolEffect(.bounce.up, options: .speed(1.4), value: selected && !GlassStyle.reduceMotion)
                         if let label = option.label {
                             Text(label).font(.system(size: 11, weight: .medium))
                         }
@@ -81,14 +89,14 @@ struct GlassTile<Content: View>: View {
 
     var body: some View {
         Button {
-            withAnimation(GlassStyle.spring) { action() }
+            withAnimation(GlassStyle.snappy) { action() }
             GlassStyle.tick()
         } label: {
             VStack(spacing: 0) {
                 Spacer(minLength: 0)
                 content()
                     .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(.primary.opacity(0.75)))
-                    .contentTransition(.symbolEffect(.replace))
+                    .contentTransition(.symbolEffect(.replace.downUp))
                 Spacer(minLength: 0)
                 HStack(spacing: 4) {
                     ForEach(0..<count, id: \.self) { i in
@@ -150,7 +158,7 @@ struct TickSlider: View {
                         .onChanged { g in
                             let i = min(max(Int((g.location.x / spacing).rounded()), 0), count - 1)
                             guard i != current else { return }
-                            withAnimation(.snappy(duration: 0.18)) {
+                            withAnimation(GlassStyle.snappy) {
                                 value = range.lowerBound + Double(i) * step
                             }
                             GlassStyle.tick()
@@ -182,7 +190,7 @@ struct GlassChip: View {
 
     var body: some View {
         Button {
-            withAnimation(GlassStyle.spring) { isOn.toggle() }
+            withAnimation(GlassStyle.snappy) { isOn.toggle() }
             GlassStyle.tick()
         } label: {
             Label(title, systemImage: icon)

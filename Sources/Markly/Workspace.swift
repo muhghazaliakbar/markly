@@ -24,6 +24,47 @@ final class FileNode: Identifiable, Hashable {
     }
 }
 
+/// The open note's text as seen by the preview and word count. Updates are throttled so typing
+/// never re-renders the rest of the interface.
+@MainActor
+final class LiveDocument: ObservableObject {
+    struct Stats: Equatable { var words = 0, characters = 0, minutes = 1 }
+
+    @Published private(set) var text = ""
+    @Published private(set) var stats = Stats()
+
+    private var latest = ""
+    private var scheduled = false
+    private var statsTask: Task<Void, Never>?
+
+    func set(_ value: String, immediately: Bool = false) {
+        latest = value
+        if immediately {
+            publish()
+        } else if !scheduled {
+            scheduled = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.publish() }
+        }
+    }
+
+    private func publish() {
+        scheduled = false
+        guard latest != text else { return }
+        text = latest
+        let snapshot = latest
+        statsTask?.cancel()
+        statsTask = Task.detached(priority: .utility) {
+            var words = 0
+            snapshot.enumerateSubstrings(in: snapshot.startIndex..., options: [.byWords, .substringNotRequired]) { _, _, _, _ in words += 1 }
+            let result = Stats(words: words, characters: snapshot.count, minutes: max(1, Int((Double(words) / 230).rounded(.up))))
+            await MainActor.run { [weak self] in
+                guard let self, !Task.isCancelled, self.stats != result else { return }
+                self.stats = result
+            }
+        }
+    }
+}
+
 @MainActor
 final class Workspace: ObservableObject {
     static let markdownExtensions: Set<String> = ["md", "markdown", "mdown", "mkd", "mdx", "txt"]
@@ -39,9 +80,22 @@ final class Workspace: ObservableObject {
         didSet { if selection != oldValue, let s = selection { open(s) } }
     }
     @Published private(set) var currentURL: URL?
-    @Published var text: String = "" {
-        didSet { if text != oldValue && !loading { markDirty() } }
+    /// The open note. Deliberately not `@Published`: keystrokes shouldn't invalidate SwiftUI.
+    /// `revision` changes when the text is replaced from outside the editor (load, reload).
+    var text: String = "" {
+        didSet {
+            guard text != oldValue else { return }
+            if loading {
+                revision &+= 1
+                live.set(text, immediately: true)
+            } else {
+                markDirty()
+                live.set(text)
+            }
+        }
     }
+    @Published private(set) var revision = 0
+    let live = LiveDocument()
     @Published private(set) var isDirty = false
     @Published var showPreview = UserDefaults.standard.bool(forKey: "showPreview") {
         didSet { defaults.set(showPreview, forKey: "showPreview") }
@@ -178,7 +232,7 @@ final class Workspace: ObservableObject {
 
     private func markDirty() {
         guard currentURL != nil else { return }
-        isDirty = true
+        if !isDirty { isDirty = true }
         saveTask?.cancel()
         saveTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(800))
@@ -192,7 +246,7 @@ final class Workspace: ObservableObject {
         guard isDirty, let url = currentURL else { return }
         do {
             try text.write(to: url, atomically: true, encoding: .utf8)
-            isDirty = false
+            if isDirty { isDirty = false }
             loadedModDate = modDate(url)
         } catch {
             errorMessage = "Couldn't save \(url.lastPathComponent): \(error.localizedDescription)"
@@ -345,11 +399,4 @@ final class Workspace: ObservableObject {
         if panel.runModal() == .OK, let url = panel.url { openFile(url) }
     }
 
-    // MARK: Stats
-
-    var stats: (words: Int, characters: Int, minutes: Int) {
-        var words = 0
-        text.enumerateSubstrings(in: text.startIndex..., options: [.byWords, .substringNotRequired]) { _, _, _, _ in words += 1 }
-        return (words, text.count, max(1, Int((Double(words) / 230).rounded(.up))))
-    }
 }

@@ -88,15 +88,31 @@ final class MarkdownHighlighter {
 
     // MARK: Highlight
 
-    /// - Parameter active: character range of the lines containing the selection (or nil).
-    func highlight(_ storage: NSTextStorage, active: NSRange?) {
+    /// Text that changes how *other* lines are styled (fences, math blocks). Edits touching these need a full pass.
+    static func affectsBlocks(_ s: String) -> Bool {
+        s.contains("```") || s.contains("~~~") || s.contains("$$")
+    }
+
+    /// - Parameters:
+    ///   - active: character range of the lines containing the selection (or nil).
+    ///   - limits: if given, only lines intersecting these ranges are restyled. Every line is still scanned
+    ///     (cheaply) to track code fences, so blocks stay correct.
+    func highlight(_ storage: NSTextStorage, active: NSRange?, limits: [NSRange]? = nil) {
         let text = storage.string as NSString
         let full = NSRange(location: 0, length: text.length)
         storage.beginEditing()
         defer { storage.endEditing() }
 
-        storage.setAttributes(typingAttributes, range: full)
+        if limits == nil { storage.setAttributes(typingAttributes, range: full) }
         guard text.length > 0 else { return }
+
+        func shouldStyle(_ lineRange: NSRange) -> Bool {
+            guard let limits else { return true }
+            return limits.contains { l in
+                NSIntersectionRange(l, lineRange).length > 0
+                    || (l.length == 0 && l.location >= lineRange.location && l.location <= NSMaxRange(lineRange))
+            }
+        }
 
         var syntaxRanges: [(NSRange, Bool)] = []  // (range, collapsible)
         var inFence: String? = nil
@@ -127,6 +143,23 @@ final class MarkdownHighlighter {
             loc = NSMaxRange(lineRange)
 
             func abs(_ r: NSRange) -> NSRange { NSRange(location: content.location + r.location, length: r.length) }
+
+            if !shouldStyle(lineRange) {
+                // Track block state only, mirroring the branches below.
+                if let fence = inFence {
+                    if line.trimmingCharacters(in: .whitespaces).hasPrefix(fence) { inFence = nil }
+                } else if let m = fenceRx.firstMatch(in: line, range: lineFull) {
+                    inFence = String(lineNS.substring(with: m.range(at: 1)).prefix(3))
+                    fenceStart = lineRange.location
+                } else if inMath {
+                    if mathFenceRx.firstMatch(in: line, range: lineFull) != nil { inMath = false }
+                } else if mathFenceRx.firstMatch(in: line, range: lineFull) != nil {
+                    inMath = true
+                    mathStart = lineRange.location
+                }
+                continue
+            }
+            if limits != nil { storage.setAttributes(typingAttributes, range: lineRange) }
 
             // Fenced code blocks
             if let fence = inFence {

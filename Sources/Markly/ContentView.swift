@@ -55,52 +55,64 @@ struct ContentView: View {
 
     private var showPanel: Bool { workspace.showInspector && !workspace.focusMode }
 
+    private static let panelWidth: CGFloat = 312
+
     @ViewBuilder
     private var detail: some View {
-        HStack(spacing: 0) {
+        ZStack(alignment: .topTrailing) {
             ZStack(alignment: .bottom) {
-                if let url = workspace.currentURL {
-                    HSplitView {
-                        EditorView(text: $workspace.text, style: style, baseURL: url.deletingLastPathComponent(),
-                                   onOpenLink: { workspace.followLink($0) })
-                            .id(url)
-                            .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
-                        if workspace.showPreview {
-                            PreviewView(markdown: workspace.text, fileURL: url, accent: accent.nsColor)
-                                .frame(minWidth: 280, maxWidth: .infinity, maxHeight: .infinity)
+                Group {
+                    if let url = workspace.currentURL {
+                        HSplitView {
+                            EditorView(text: Binding(get: { workspace.text }, set: { workspace.text = $0 }),
+                                       style: style, baseURL: url.deletingLastPathComponent(),
+                                       revision: workspace.revision,
+                                       trailingReserve: showPanel ? Self.panelWidth : 0,
+                                       onOpenLink: { workspace.followLink($0) })
+                                .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
+                            if workspace.showPreview {
+                                LivePreview(live: workspace.live, fileURL: url, accent: accent.nsColor)
+                                    .frame(minWidth: 280, maxWidth: .infinity, maxHeight: .infinity)
+                            }
                         }
+                        .id(url)
+                        .transition(.opacity)
+                    } else {
+                        EmptyEditor()
+                            .transition(.opacity)
                     }
-                    if showStatusBar && !workspace.focusMode {
-                        StatusPill()
-                            .padding(.bottom, 14)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
-                } else {
-                    EmptyEditor()
+                }
+                .animation(GlassStyle.fade, value: workspace.currentURL)
+
+                if showStatusBar && !workspace.focusMode && workspace.currentURL != nil {
+                    StatusPill(live: workspace.live)
+                        .padding(.bottom, 14)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .overlay(alignment: .topTrailing) {
-                if workspace.focusMode {
-                    Button { workspace.focusMode = false } label: {
-                        Image(systemName: "arrow.down.right.and.arrow.up.left")
-                            .frame(width: 34, height: 34).contentShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .glassEffect(.regular.interactive(), in: Circle())
-                    .padding(16)
-                    .help("Exit Focus Mode (⇧⌘F)")
-                    .transition(.scale.combined(with: .opacity))
-                }
-            }
 
+            // The panel floats over the editor instead of resizing it, so opening it never re-wraps text.
             if showPanel {
                 InspectorPanel(git: git)
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .trailing).combined(with: .opacity),
+                        removal: .move(edge: .trailing).combined(with: .opacity)))
+            }
+
+            if workspace.focusMode {
+                Button { withAnimation(GlassStyle.spring) { workspace.focusMode = false } } label: {
+                    Image(systemName: "arrow.down.right.and.arrow.up.left")
+                        .frame(width: 34, height: 34).contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: Circle())
+                .padding(16)
+                .help("Exit Focus Mode (⇧⌘F)")
+                .transition(.scale(scale: 0.6).combined(with: .opacity))
             }
         }
-        .animation(GlassStyle.spring, value: showPanel)
-        .animation(GlassStyle.spring, value: workspace.showPreview)
         .background(Color(nsColor: .textBackgroundColor))
         .navigationTitle(workspace.currentURL?.deletingPathExtension().lastPathComponent ?? "Markly")
         .toolbar { toolbar }
@@ -123,10 +135,10 @@ struct ContentView: View {
         ToolbarItemGroup(placement: .primaryAction) {
             Button { workspace.newFile() } label: { Label("New File", systemImage: "square.and.pencil") }
                 .help("New File (⌘N)")
-            Toggle(isOn: $workspace.showPreview) { Label("Preview", systemImage: "doc.richtext") }
+            Toggle(isOn: $workspace.showPreview.animation(GlassStyle.fade)) { Label("Preview", systemImage: "doc.richtext") }
                 .help("Toggle Preview (⌥⌘P)")
                 .disabled(workspace.currentURL == nil)
-            Button { workspace.focusMode.toggle() } label: { Label("Focus", systemImage: "arrow.up.left.and.arrow.down.right") }
+            Button { withAnimation(GlassStyle.spring) { workspace.focusMode.toggle() } } label: { Label("Focus", systemImage: "arrow.up.left.and.arrow.down.right") }
                 .help("Focus Mode (⇧⌘F)")
                 .disabled(workspace.currentURL == nil)
         }
@@ -140,11 +152,22 @@ struct ContentView: View {
     }
 }
 
-struct StatusPill: View {
-    @EnvironmentObject var workspace: Workspace
+/// Observes only the throttled live document, so the rest of the window doesn't re-render while typing.
+struct LivePreview: View {
+    @ObservedObject var live: LiveDocument
+    var fileURL: URL
+    var accent: NSColor
 
     var body: some View {
-        let s = workspace.stats
+        PreviewView(markdown: live.text, fileURL: fileURL, accent: accent)
+    }
+}
+
+struct StatusPill: View {
+    @ObservedObject var live: LiveDocument
+
+    var body: some View {
+        let s = live.stats
         HStack(spacing: 12) {
             Text("\(s.words) word\(s.words == 1 ? "" : "s")")
             Divider().frame(height: 10)
@@ -155,6 +178,7 @@ struct StatusPill: View {
         .font(.system(size: 11, weight: .medium).monospacedDigit())
         .foregroundStyle(.secondary)
         .contentTransition(.numericText())
+        .animation(GlassStyle.snappy, value: s)
         .padding(.horizontal, 14)
         .frame(height: 28)
         .glassEffect(.regular, in: Capsule())

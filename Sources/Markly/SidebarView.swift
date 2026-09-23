@@ -111,6 +111,7 @@ struct SidebarView: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.tertiary)
                     .rotationEffect(.degrees(collapsed ? -90 : 0))
+                    .animation(GlassStyle.snappy, value: collapsed)
             }
             .padding(.top, 6)
             .padding(.bottom, 2)
@@ -125,7 +126,7 @@ struct SidebarView: View {
             Button("Reveal in Finder") { workspace.revealInFinder(root) }
             Button("Refresh") { workspace.refresh() }
             Divider()
-            Button("Remove from Sidebar") { withAnimation { workspace.removeFolder(root) } }
+            Button("Remove from Sidebar") { withAnimation(GlassStyle.spring) { workspace.removeFolder(root) } }
         }
     }
 

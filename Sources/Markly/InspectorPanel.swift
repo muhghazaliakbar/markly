@@ -117,7 +117,7 @@ struct InspectorPanel: View {
         HStack(spacing: 0) {
             ForEach(AccentChoice.allCases) { choice in
                 Button {
-                    withAnimation(GlassStyle.spring) { accent = choice }
+                    withAnimation(GlassStyle.snappy) { accent = choice }
                     GlassStyle.tick()
                 } label: {
                     Circle()

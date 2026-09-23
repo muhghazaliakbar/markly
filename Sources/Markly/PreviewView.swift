@@ -22,6 +22,7 @@ struct PreviewView: NSViewRepresentable {
         let web = WKWebView()
         web.navigationDelegate = context.coordinator
         web.setValue(false, forKey: "drawsBackground")
+        web.alphaValue = 0  // faded in once the first render is ready, so there's never a blank flash
         return web
     }
 
@@ -45,6 +46,7 @@ struct PreviewView: NSViewRepresentable {
                 let html = MarkdownRenderer.page(title: fileURL?.lastPathComponent ?? "Preview",
                                                  body: MarkdownRenderer.html(from: markdown),
                                                  baseURL: fileURL?.deletingLastPathComponent(), accentHex: accent)
+                web.alphaValue = 0
                 // Write to a temp file so relative image paths next to the document can load.
                 let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("markly-preview.html")
                 try? html.write(to: tmp, atomically: true, encoding: .utf8)
@@ -60,7 +62,7 @@ struct PreviewView: NSViewRepresentable {
                 if self.ready { self.push(body, to: web) } else { self.pending = body }
             }
             work = item
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: item)
+            DispatchQueue.main.async(execute: item)
         }
 
         private func push(_ body: String, to web: WKWebView) {
@@ -71,6 +73,11 @@ struct PreviewView: NSViewRepresentable {
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             ready = true
             if let p = pending { pending = nil; push(p, to: webView) }
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.22
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                webView.animator().alphaValue = 1
+            }
         }
 
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,

@@ -105,7 +105,19 @@ enum AppTheme: String, CaseIterable, Identifiable {
         }
     }
 
-    func apply() {
+    /// Switches the app appearance with a short cross-fade of every window, like System Settings does.
+    func apply(animated: Bool = true) {
+        if animated && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            for window in NSApp.windows where window.isVisible {
+                guard let frameView = window.contentView?.superview else { continue }
+                frameView.wantsLayer = true
+                let fade = CATransition()
+                fade.type = .fade
+                fade.duration = 0.28
+                fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                frameView.layer?.add(fade, forKey: "themeFade")
+            }
+        }
         switch self {
         case .system: NSApp.appearance = nil
         case .light: NSApp.appearance = NSAppearance(named: .aqua)

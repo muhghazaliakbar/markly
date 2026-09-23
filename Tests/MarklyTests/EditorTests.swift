@@ -95,4 +95,32 @@ final class EditorTests: XCTestCase {
     func testRendererHighlight() {
         XCTAssertTrue(MarkdownRenderer.html(from: "a ==b== c").contains("<mark>b</mark>"))
     }
+
+    /// Styling only the edited lines must give the same result as restyling everything.
+    func testIncrementalHighlightMatchesFull() {
+        let doc = "# Title\n\nSome **bold** text\n\n```swift\nlet x = 1\n```\n\n- [ ] task\n> quote"
+        let h = MarkdownHighlighter()
+        let active = NSRange(location: 0, length: 8)
+
+        let incremental = NSTextStorage(string: doc)
+        h.highlight(incremental, active: active)
+        // Edit inside the code block, then restyle just that line.
+        let editAt = (doc as NSString).range(of: "let x").location
+        incremental.replaceCharacters(in: NSRange(location: editAt, length: 3), with: "var")
+        let line = (incremental.string as NSString).lineRange(for: NSRange(location: editAt, length: 0))
+        h.highlight(incremental, active: active, limits: [line, active])
+
+        let full = NSTextStorage(string: incremental.string)
+        h.highlight(full, active: active)
+
+        for key: NSAttributedString.Key in [.font, .foregroundColor, .mdCodeBlock, .mdTaskBox, .mdBlockquote] {
+            var i = 0
+            while i < full.length {
+                let a = full.attribute(key, at: i, effectiveRange: nil) as? NSObject
+                let b = incremental.attribute(key, at: i, effectiveRange: nil) as? NSObject
+                XCTAssertEqual(a, b, "\(key.rawValue) differs at \(i)")
+                i += 1
+            }
+        }
+    }
 }

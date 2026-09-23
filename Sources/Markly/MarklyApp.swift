@@ -7,7 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
-        AppTheme(rawValue: UserDefaults.standard.string(forKey: Pref.theme) ?? "")?.apply()
+        AppTheme(rawValue: UserDefaults.standard.string(forKey: Pref.theme) ?? "")?.apply(animated: false)
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
@@ -116,9 +116,9 @@ struct MarklyCommands: Commands {
         }
 
         CommandGroup(after: .sidebar) {
-            Toggle("Show Preview", isOn: $workspace.showPreview)
+            Toggle("Show Preview", isOn: $workspace.showPreview.animation(GlassStyle.fade))
                 .keyboardShortcut("p", modifiers: [.command, .option])
-            Toggle("Focus Mode", isOn: $workspace.focusMode)
+            Toggle("Focus Mode", isOn: $workspace.focusMode.animation(GlassStyle.spring))
                 .keyboardShortcut("f", modifiers: [.command, .shift])
             Divider()
             Button("Bigger Text") { fontSize = min(28, fontSize + 1) }.keyboardShortcut("+")
