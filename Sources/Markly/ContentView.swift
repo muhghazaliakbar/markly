@@ -29,15 +29,13 @@ struct ContentView: View {
                 NavigationSplitView(columnVisibility: $columns) {
                     SidebarView()
                         .navigationSplitViewColumnWidth(min: 200, ideal: 260, max: 420)
+                        .background { BehindWindowBlur().ignoresSafeArea() }
                 } detail: {
                     detail
                 }
             }
         }
         .tint(accent.color)
-        // Let the desktop show through wherever the window itself is visible (the sidebar).
-        // The editor paints its own opaque background on top.
-        .containerBackground(.ultraThinMaterial, for: .window)
         .onChange(of: workspace.focusMode) { _, on in
             withAnimation(GlassStyle.spring) { columns = on ? .detailOnly : .all }
         }
@@ -148,9 +146,9 @@ struct StatusPill: View {
     var body: some View {
         let s = workspace.stats
         HStack(spacing: 12) {
-            Text("\(s.words) words")
+            Text("\(s.words) word\(s.words == 1 ? "" : "s")")
             Divider().frame(height: 10)
-            Text("\(s.characters) chars")
+            Text("\(s.characters) char\(s.characters == 1 ? "" : "s")")
             Divider().frame(height: 10)
             Text("\(s.minutes) min read")
         }

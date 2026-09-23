@@ -196,3 +196,20 @@ struct GlassChip: View {
         .glassEffect(isOn ? .regular.tint(accent).interactive() : .regular.interactive(), in: Capsule())
     }
 }
+
+/// A blur of whatever is behind the window (desktop, other apps), like Finder's sidebar.
+struct BehindWindowBlur: NSViewRepresentable {
+    var material: NSVisualEffectView.Material = .sidebar
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.blendingMode = .behindWindow
+        view.state = .followsWindowActiveState
+        view.material = material
+        return view
+    }
+
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {
+        view.material = material
+    }
+}
