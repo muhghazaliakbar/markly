@@ -35,6 +35,7 @@ struct GlassSegmented<Value: Hashable>: View {
     @Binding var selection: Value
     var accent: Color
 
+    @Environment(\.accentFill) private var accentFill
     @Namespace private var pill
 
     private var hasLabels: Bool { options.contains { $0.label != nil } }
@@ -63,7 +64,7 @@ struct GlassSegmented<Value: Hashable>: View {
                     .background {
                         if selected {
                             RoundedRectangle(cornerRadius: radius - 4, style: .continuous)
-                                .fill(accent.gradient)
+                                .fill(accentFill ?? AnyShapeStyle(accent.gradient))
                                 .shadow(color: accent.opacity(0.35), radius: 8, y: 2)
                                 .matchedGeometryEffect(id: "pill", in: pill)
                         }
@@ -130,6 +131,8 @@ struct TickSlider: View {
     var accent: Color
     var format: (Double) -> String
 
+    @Environment(\.accentFill) private var accentFill
+
     private var count: Int { Int(((range.upperBound - range.lowerBound) / step).rounded()) + 1 }
     private var current: Int { Int(((min(max(value, range.lowerBound), range.upperBound) - range.lowerBound) / step).rounded()) }
 
@@ -149,7 +152,7 @@ struct TickSlider: View {
                     ForEach(0..<count, id: \.self) { i in
                         let d = abs(i - current)
                         Capsule()
-                            .fill(i == current ? AnyShapeStyle(accent.gradient) : AnyShapeStyle(Color.primary.opacity(max(0.12, 0.55 - Double(d) * 0.07))))
+                            .fill(i == current ? (accentFill ?? AnyShapeStyle(accent.gradient)) : AnyShapeStyle(Color.primary.opacity(max(0.12, 0.55 - Double(d) * 0.07))))
                             .frame(width: i == current ? 3.5 : 2, height: i == current ? 30 : max(10, 22 - CGFloat(d) * 1.6))
                             .position(x: CGFloat(i) * spacing, y: geo.size.height / 2)
                     }

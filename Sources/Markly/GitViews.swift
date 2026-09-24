@@ -60,7 +60,7 @@ struct GitSidebarButton: View {
 struct GitCard: View {
     @EnvironmentObject var workspace: Workspace
     @ObservedObject var git: GitModel
-    @AppStorage(Pref.accent) private var accent = AccentChoice.system
+    @AppStorage(Pref.accent) private var accent = AccentChoice.markly
     /// Files the user unchecked. Tracking exclusions keeps newly changed files checked by default.
     @State private var excluded: Set<String> = []
 
@@ -142,7 +142,7 @@ struct GitCard: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.white)
                 .frame(width: 28, height: 28)
-                .background(Circle().fill(tint.gradient))
+                .background(Circle().fill(accent.fill))
             VStack(alignment: .leading, spacing: 1) {
                 Text(branch).font(.system(size: 13, weight: .medium))
                 Text(remote ?? "No remote · commits stay on this Mac")

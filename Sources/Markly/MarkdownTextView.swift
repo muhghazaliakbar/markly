@@ -3,6 +3,7 @@ import AppKit
 /// Draws block-level decorations: code block backgrounds, blockquote bars and horizontal rules.
 final class MarkdownLayoutManager: NSLayoutManager {
     var accent: NSColor = .controlAccentColor
+    var theme = Theme.system
 
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
         super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
@@ -29,7 +30,7 @@ final class MarkdownLayoutManager: NSLayoutManager {
             let full = fullRange(of: .mdCodeBlock, value: value, around: range, in: storage)
             guard drawn.insert(full.location).inserted else { return }
             let rect = blockRect(full).insetBy(dx: -10, dy: 0)
-            Palette.codeBackground.setFill()
+            theme.codeBackground.setFill()
             NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8).fill()
         }
 
@@ -55,7 +56,7 @@ final class MarkdownLayoutManager: NSLayoutManager {
             clip.addClip()
             box.image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             NSGraphicsContext.restoreGraphicsState()
-            NSColor.separatorColor.setStroke()
+            theme.rule.setStroke()
             clip.lineWidth = 1
             clip.stroke()
         }
@@ -63,7 +64,7 @@ final class MarkdownLayoutManager: NSLayoutManager {
         storage.enumerateAttribute(.mdRule, in: chars) { value, range, _ in
             guard value != nil else { return }
             let rect = blockRect(range)
-            NSColor.separatorColor.setFill()
+            theme.rule.setFill()
             NSRect(x: rect.minX, y: rect.midY.rounded(), width: rect.width, height: 1).fill()
         }
     }

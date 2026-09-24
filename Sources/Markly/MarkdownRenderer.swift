@@ -228,7 +228,7 @@ enum MarkdownRenderer {
     """
 
     /// A standalone document, used for the live preview and for export.
-    static func page(title: String, body: String, baseURL: URL?, accentHex: String) -> String {
+    static func page(title: String, body: String, baseURL: URL?, accentHex: String, warm: Bool = false) -> String {
         let base = baseURL.map { "<base href=\"\($0.absoluteString)\">" } ?? ""
         let network = Pref.bool(Pref.previewNetwork, default: true)
         let csp = contentSecurityPolicy(network: network, remoteImages: Pref.bool(Pref.remoteImages, default: true))
@@ -237,7 +237,7 @@ enum MarkdownRenderer {
         <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
         <meta http-equiv="Content-Security-Policy" content="\(csp)">
         <title>\(escape(title))</title>\(base)
-        <style>\(css) :root { --accent: \(accentHex); }</style>
+        <style>\(css) :root { --accent: \(accentHex); }\(warm ? Theme.marklyCSS : "")</style>
         \(network ? scripts : localScripts)
         </head><body><article id="content">\(body)</article></body></html>
         """
