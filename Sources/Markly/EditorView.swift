@@ -401,6 +401,9 @@ struct EditorView: NSViewRepresentable {
             tv.typingAttributes = highlighter.typingAttributes
             tv.selectedTextAttributes = [.backgroundColor: Palette.accentTint(style.accent.nsColor, alpha: 0.25)]
             (tv.layoutManager as? MarkdownLayoutManager)?.accent = style.accent.nsColor
+            (tv.layoutManager as? MarkdownLayoutManager)?.theme = style.accent.theme
+            tv.backgroundColor = style.accent.theme.paper
+            tv.enclosingScrollView?.backgroundColor = style.accent.theme.paper
         }
 
         private func activeLines(_ tv: NSTextView) -> NSRange {
@@ -447,7 +450,7 @@ struct EditorView: NSViewRepresentable {
             guard force || paragraph != dimmedParagraph else { return }
             dimmedParagraph = paragraph
             lm.removeTemporaryAttribute(.foregroundColor, forCharacterRange: full)
-            let dim = NSColor.tertiaryLabelColor
+            let dim = style.accent.theme.dim
             if paragraph.location > 0 {
                 lm.addTemporaryAttribute(.foregroundColor, value: dim, forCharacterRange: NSRange(location: 0, length: paragraph.location))
             }

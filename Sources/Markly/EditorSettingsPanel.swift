@@ -11,7 +11,7 @@ struct EditorSettingsPanel: View {
     @AppStorage(Pref.lineSpacing) private var lineSpacing = 1.4
     @AppStorage(Pref.editorWidth) private var editorWidth = 720.0
     @AppStorage(Pref.syntax) private var syntax = SyntaxVisibility.focused
-    @AppStorage(Pref.accent) private var accent = AccentChoice.system
+    @AppStorage(Pref.accent) private var accent = AccentChoice.markly
     @AppStorage(Pref.spellCheck) private var spellCheck = true
     @AppStorage(Pref.imagePreview) private var imagePreview = ImagePreview.medium
 

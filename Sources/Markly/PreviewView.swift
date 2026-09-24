@@ -15,6 +15,8 @@ struct PreviewView: NSViewRepresentable {
     var markdown: String
     var fileURL: URL?
     var accent: NSColor
+    /// The Markly palette (warm paper and ink) instead of the neutral page.
+    var warm = false
     var reloadKey: String = ""
     var animateSwitch: Bool = true
     var scrollSync: ScrollSync? = nil
@@ -39,8 +41,8 @@ struct PreviewView: NSViewRepresentable {
                 web?.evaluateJavaScript("__syncLine(\(position), \(ratio), \(glide), \(immediate))")
             }
         }
-        context.coordinator.schedule(web: web, markdown: markdown, fileURL: fileURL, accent: accent.hexString + reloadKey,
-                                     animate: animateSwitch)
+        context.coordinator.schedule(web: web, markdown: markdown, fileURL: fileURL, accent: accent.hexString + (warm ? "w" : "") + reloadKey,
+                                     warm: warm, animate: animateSwitch)
     }
 
     static func dismantleNSView(_ web: WKWebView, coordinator: Coordinator) {
@@ -64,7 +66,7 @@ struct PreviewView: NSViewRepresentable {
         private var lastMarkdown: String?
         private var work: DispatchWorkItem?
 
-        func schedule(web: WKWebView, markdown: String, fileURL: URL?, accent: String, animate: Bool) {
+        func schedule(web: WKWebView, markdown: String, fileURL: URL?, accent: String, warm: Bool, animate: Bool) {
             let path = fileURL?.path ?? ""
             // Another note, page already loaded: swap the content in place with the editor's transition.
             if accent == loadedKey, path != loadedPath, ready {
@@ -82,7 +84,7 @@ struct PreviewView: NSViewRepresentable {
                 lastMarkdown = markdown
                 let html = MarkdownRenderer.page(title: fileURL?.lastPathComponent ?? "Preview",
                                                  body: MarkdownRenderer.html(from: markdown),
-                                                 baseURL: fileURL?.deletingLastPathComponent(), accentHex: String(accent.prefix(7)))
+                                                 baseURL: fileURL?.deletingLastPathComponent(), accentHex: String(accent.prefix(7)), warm: warm)
                 web.alphaValue = 0
                 // Write to a temp file so relative image paths next to the document can load.
                 let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("markly-preview.html")
@@ -156,29 +158,29 @@ final class Exporter: NSObject, WKNavigationDelegate {
     private let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 800, height: 1000))
     private var completion: ((WKWebView) -> Void)?
 
-    static func html(for markdown: String, url: URL?, accent: NSColor) -> String {
+    static func html(for markdown: String, url: URL?, accent: NSColor, warm: Bool = false) -> String {
         MarkdownRenderer.page(title: url?.deletingPathExtension().lastPathComponent ?? "Document",
                               body: MarkdownRenderer.html(from: markdown),
-                              baseURL: url?.deletingLastPathComponent(), accentHex: accent.hexString)
+                              baseURL: url?.deletingLastPathComponent(), accentHex: accent.hexString, warm: warm)
     }
 
-    static func exportHTML(markdown: String, url: URL?, accent: NSColor) {
+    static func exportHTML(markdown: String, url: URL?, accent: NSColor, warm: Bool = false) {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.html]
         panel.nameFieldStringValue = (url?.deletingPathExtension().lastPathComponent ?? "Document") + ".html"
         guard panel.runModal() == .OK, let dest = panel.url else { return }
         // Exported files shouldn't depend on a <base> pointing at the author's disk.
         let html = MarkdownRenderer.page(title: url?.deletingPathExtension().lastPathComponent ?? "Document",
-                                         body: MarkdownRenderer.html(from: markdown), baseURL: nil, accentHex: accent.hexString)
+                                         body: MarkdownRenderer.html(from: markdown), baseURL: nil, accentHex: accent.hexString, warm: warm)
         try? html.write(to: dest, atomically: true, encoding: .utf8)
     }
 
-    static func exportPDF(markdown: String, url: URL?, accent: NSColor) {
+    static func exportPDF(markdown: String, url: URL?, accent: NSColor, warm: Bool = false) {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.pdf]
         panel.nameFieldStringValue = (url?.deletingPathExtension().lastPathComponent ?? "Document") + ".pdf"
         guard panel.runModal() == .OK, let dest = panel.url else { return }
-        run(markdown: markdown, url: url, accent: accent) { web in
+        run(markdown: markdown, url: url, accent: accent, warm: warm) { web in
             let info = NSPrintInfo.shared.copy() as! NSPrintInfo
             info.jobDisposition = .save
             info.dictionary()[NSPrintInfo.AttributeKey.jobSavingURL] = dest
@@ -186,8 +188,8 @@ final class Exporter: NSObject, WKNavigationDelegate {
         }
     }
 
-    static func print(markdown: String, url: URL?, accent: NSColor) {
-        run(markdown: markdown, url: url, accent: accent) { web in
+    static func print(markdown: String, url: URL?, accent: NSColor, warm: Bool = false) {
+        run(markdown: markdown, url: url, accent: accent, warm: warm) { web in
             printWith(web, info: NSPrintInfo.shared.copy() as! NSPrintInfo, showPanels: true)
         }
     }
@@ -210,14 +212,14 @@ final class Exporter: NSObject, WKNavigationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) { if active?.web === web { active = nil } }
     }
 
-    private static func run(markdown: String, url: URL?, accent: NSColor, then: @escaping (WKWebView) -> Void) {
+    private static func run(markdown: String, url: URL?, accent: NSColor, warm: Bool, then: @escaping (WKWebView) -> Void) {
         let exporter = Exporter()
         active = exporter
         exporter.completion = then
         exporter.web.navigationDelegate = exporter
         let html = MarkdownRenderer.page(title: url?.deletingPathExtension().lastPathComponent ?? "Document",
                                          body: MarkdownRenderer.html(from: markdown),
-                                         baseURL: url?.deletingLastPathComponent(), accentHex: accent.hexString)
+                                         baseURL: url?.deletingLastPathComponent(), accentHex: accent.hexString, warm: warm)
             // Always print in light mode.
             .replacingOccurrences(of: "color-scheme: light dark;", with: "color-scheme: light;")
             .replacingOccurrences(of: "@media (prefers-color-scheme: dark)", with: "@media not all")

@@ -127,10 +127,11 @@ enum AppTheme: String, CaseIterable, Identifiable {
 }
 
 enum AccentChoice: String, CaseIterable, Identifiable {
-    case system, blue, purple, pink, red, orange, yellow, green, graphite, custom
+    case markly, system, blue, purple, pink, red, orange, yellow, green, graphite, custom
     var id: Self { self }
     var label: String {
         switch self {
+        case .markly: "Markly"
         case .system: "macOS Accent"
         case .custom: "Custom"
         default: rawValue.capitalized
@@ -143,6 +144,7 @@ enum AccentChoice: String, CaseIterable, Identifiable {
     var nsColor: NSColor {
         switch self {
         case .custom: NSColor(hex: UserDefaults.standard.string(forKey: Pref.accentCustom) ?? "") ?? .controlAccentColor
+        case .markly: Brand.accent
         case .system: .controlAccentColor
         case .blue: .systemBlue
         case .purple: .systemPurple
@@ -220,7 +222,7 @@ struct EditorStyle: Equatable {
     var lineSpacing: CGFloat = 1.4
     var maxWidth: CGFloat = 720
     var syntax: SyntaxVisibility = .focused
-    var accent: AccentChoice = .system
+    var accent: AccentChoice = .markly
     var spellCheck: Bool = true
     var imagePreview: ImagePreview = .medium
     /// Changes when a custom accent is picked, so the editor restyles.

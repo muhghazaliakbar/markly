@@ -5,6 +5,7 @@ import SwiftUI
 struct AppSettingsView: View {
     /// Reopens on the tab you last used, like Apple's own Settings windows.
     @AppStorage("settingsTab") private var tab = "general"
+    @AppStorage(Pref.accent) private var accent = AccentChoice.markly
 
     var body: some View {
         TabView(selection: $tab) {
@@ -15,6 +16,8 @@ struct AppSettingsView: View {
             Tab("About", systemImage: "info.circle", value: "about") { AboutSettings() }
         }
         .frame(width: 600, height: 560)
+        .tint(accent.color)
+        .environment(\.accentFill, accent.fill)
     }
 }
 
@@ -66,7 +69,7 @@ struct SettingIcon: View {
 
 private struct GeneralSettings: View {
     @AppStorage(Pref.theme) private var theme = AppTheme.system
-    @AppStorage(Pref.accent) private var accent = AccentChoice.system
+    @AppStorage(Pref.accent) private var accent = AccentChoice.markly
     @AppStorage(Pref.accentCustom) private var accentCustom = ""
     @AppStorage(Pref.showStatusBar) private var showStatusBar = true
     @AppStorage(Pref.reopenLastNote) private var reopenLastNote = true
@@ -86,7 +89,7 @@ private struct GeneralSettings: View {
             Section {
                 HStack(spacing: 18) {
                     ForEach(AppTheme.allCases) { option in
-                        AppearanceThumbnail(theme: option, selected: theme == option, accent: accent.color) {
+                        AppearanceThumbnail(theme: option, selected: theme == option, accent: accent.color, warm: accent.theme.warm) {
                             withAnimation(GlassStyle.snappy) { theme = option }
                         }
                     }
@@ -100,7 +103,7 @@ private struct GeneralSettings: View {
             Section {
                 HStack(spacing: 10) {
                     ForEach(AccentChoice.presets) { choice in
-                        AccentSwatch(fill: choice == .system ? nil : choice.color, label: choice.label, selected: accent == choice) {
+                        AccentSwatch(fill: choice == .system ? nil : choice.fill, label: choice.label, selected: accent == choice) {
                             withAnimation(GlassStyle.snappy) { accent = choice }
                         }
                     }
@@ -118,7 +121,9 @@ private struct GeneralSettings: View {
                         .foregroundStyle(accent == .custom ? .primary : .secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Text("Used for links, list markers, selections, the caret and controls throughout the app.")
+                Text(accent == .markly
+                     ? "Markly's coral and rose, with warm paper and ink in the editor, sidebar and preview."
+                     : "Used for links, list markers, selections, the caret and controls throughout the app.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } header: {
@@ -157,6 +162,7 @@ private struct AppearanceThumbnail: View {
     var theme: AppTheme
     var selected: Bool
     var accent: Color
+    var warm = false
     var action: () -> Void
 
     var body: some View {
@@ -193,9 +199,10 @@ private struct AppearanceThumbnail: View {
     }
 
     private func window(light: Bool) -> some View {
-        let bg = light ? Color(white: 0.97) : Color(white: 0.15)
-        let bar = light ? Color(white: 0.87) : Color(white: 0.27)
-        let line = light ? Color(white: 0.78) : Color(white: 0.38)
+        let rgb = { (v: UInt32) in Color(nsColor: Brand.rgb(v)) }
+        let bg = warm ? rgb(light ? 0xfffbfa : 0x1e1719) : light ? Color(white: 0.97) : Color(white: 0.15)
+        let bar = warm ? rgb(light ? 0xf9e4e3 : 0x3a262c) : light ? Color(white: 0.87) : Color(white: 0.27)
+        let line = warm ? rgb(light ? 0xdcc8cc : 0x5c474d) : light ? Color(white: 0.78) : Color(white: 0.38)
         return HStack(spacing: 0) {
             bar.frame(width: 22)
             VStack(alignment: .leading, spacing: 5) {
@@ -213,7 +220,7 @@ private struct AppearanceThumbnail: View {
 
 private struct AccentSwatch: View {
     /// nil draws the multicolour "follow macOS" swatch.
-    var fill: Color?
+    var fill: AnyShapeStyle?
     var label: String
     var selected: Bool
     var action: () -> Void
@@ -221,7 +228,7 @@ private struct AccentSwatch: View {
     var body: some View {
         Button(action: action) {
             Circle()
-                .fill(fill.map { AnyShapeStyle($0.gradient) }
+                .fill(fill
                       ?? AnyShapeStyle(AngularGradient(colors: [.red, .orange, .yellow, .green, .blue, .purple, .red], center: .center)))
                 .frame(width: 20, height: 20)
                 .overlay {

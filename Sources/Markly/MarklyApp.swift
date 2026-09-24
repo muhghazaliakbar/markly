@@ -55,7 +55,7 @@ private func send(_ selector: Selector) {
 struct MarklyCommands: Commands {
     @ObservedObject var workspace: Workspace
     @AppStorage(Pref.fontSize) private var fontSize = 16.0
-    @AppStorage(Pref.accent) private var accent = AccentChoice.system
+    @AppStorage(Pref.accent) private var accent = AccentChoice.markly
 
     var body: some Commands {
         CommandGroup(after: .appInfo) {
@@ -82,13 +82,13 @@ struct MarklyCommands: Commands {
                 .disabled(workspace.currentURL == nil)
         }
         CommandGroup(after: .importExport) {
-            Button("Export as HTML…") { Exporter.exportHTML(markdown: workspace.text, url: workspace.currentURL, accent: accent.nsColor) }
+            Button("Export as HTML…") { Exporter.exportHTML(markdown: workspace.text, url: workspace.currentURL, accent: accent.nsColor, warm: accent.theme.warm) }
                 .disabled(workspace.currentURL == nil)
-            Button("Export as PDF…") { Exporter.exportPDF(markdown: workspace.text, url: workspace.currentURL, accent: accent.nsColor) }
+            Button("Export as PDF…") { Exporter.exportPDF(markdown: workspace.text, url: workspace.currentURL, accent: accent.nsColor, warm: accent.theme.warm) }
                 .disabled(workspace.currentURL == nil)
         }
         CommandGroup(replacing: .printItem) {
-            Button("Print…") { Exporter.print(markdown: workspace.text, url: workspace.currentURL, accent: accent.nsColor) }
+            Button("Print…") { Exporter.print(markdown: workspace.text, url: workspace.currentURL, accent: accent.nsColor, warm: accent.theme.warm) }
                 .keyboardShortcut("p")
                 .disabled(workspace.currentURL == nil)
         }

@@ -16,13 +16,6 @@ enum Palette {
         }
     }
 
-    static let codeBackground = dynamic(
-        light: NSColor(white: 0, alpha: 0.045),
-        dark: NSColor(white: 1, alpha: 0.07))
-    static let syntax = NSColor.tertiaryLabelColor
-    static let secondary = NSColor.secondaryLabelColor
-    static let text = NSColor.labelColor
-
     static func accentTint(_ accent: NSColor, alpha: CGFloat) -> NSColor {
         NSColor(name: nil) { appearance in
             var result = accent
@@ -74,6 +67,7 @@ final class MarkdownHighlighter {
     var baseFont: NSFont { style.font.font(size: style.fontSize) }
     var codeFont: NSFont { .monospacedSystemFont(ofSize: style.fontSize * 0.9, weight: .regular) }
     var accent: NSColor { style.accent.nsColor }
+    var theme: Theme { style.accent.theme }
 
     var baseParagraph: NSMutableParagraphStyle {
         let p = NSMutableParagraphStyle()
@@ -83,7 +77,7 @@ final class MarkdownHighlighter {
     }
 
     var typingAttributes: [NSAttributedString.Key: Any] {
-        [.font: baseFont, .foregroundColor: Palette.text, .paragraphStyle: baseParagraph]
+        [.font: baseFont, .foregroundColor: theme.text, .paragraphStyle: baseParagraph]
     }
 
     // MARK: Highlight
@@ -165,7 +159,7 @@ final class MarkdownHighlighter {
             if let fence = inFence {
                 storage.addAttributes([.font: codeFont, .mdCodeBlock: true], range: lineRange)
                 if line.trimmingCharacters(in: .whitespaces).hasPrefix(fence) {
-                    storage.addAttribute(.foregroundColor, value: Palette.syntax, range: content)
+                    storage.addAttribute(.foregroundColor, value: theme.syntax, range: content)
                     storage.addAttribute(.mdCodeBlock, value: fenceStart, range: lineRange)
                     inFence = nil
                 } else {
@@ -177,7 +171,7 @@ final class MarkdownHighlighter {
                 let marker = lineNS.substring(with: m.range(at: 1))
                 inFence = String(marker.prefix(3))
                 fenceStart = lineRange.location
-                storage.addAttributes([.font: codeFont, .foregroundColor: Palette.syntax, .mdCodeBlock: fenceStart], range: lineRange)
+                storage.addAttributes([.font: codeFont, .foregroundColor: theme.syntax, .mdCodeBlock: fenceStart], range: lineRange)
                 if m.range(at: 2).length > 0 {
                     storage.addAttribute(.foregroundColor, value: accent, range: abs(m.range(at: 2)))
                 }
@@ -188,7 +182,7 @@ final class MarkdownHighlighter {
             if inMath || mathFenceRx.firstMatch(in: line, range: lineFull) != nil {
                 if !inMath { inMath = true; mathStart = lineRange.location }
                 else if mathFenceRx.firstMatch(in: line, range: lineFull) != nil { inMath = false }
-                storage.addAttributes([.font: codeFont, .foregroundColor: Palette.secondary, .mdCodeBlock: mathStart], range: lineRange)
+                storage.addAttributes([.font: codeFont, .foregroundColor: theme.secondary, .mdCodeBlock: mathStart], range: lineRange)
                 continue
             }
 
@@ -196,7 +190,7 @@ final class MarkdownHighlighter {
 
             // Horizontal rule
             if ruleRx.firstMatch(in: line, range: lineFull) != nil {
-                storage.addAttributes([.foregroundColor: Palette.syntax, .mdRule: true], range: content)
+                storage.addAttributes([.foregroundColor: theme.syntax, .mdRule: true], range: content)
                 continue
             }
 
@@ -220,7 +214,7 @@ final class MarkdownHighlighter {
                 storage.addAttribute(.font, value: codeFont, range: content)
                 let pipes = Self.rx(#"\||(?<=\|)\s*:?-{2,}:?\s*(?=\|)"#)
                 for m in pipes.matches(in: line, range: lineFull) {
-                    storage.addAttribute(.foregroundColor, value: Palette.syntax, range: abs(m.range))
+                    storage.addAttribute(.foregroundColor, value: theme.syntax, range: abs(m.range))
                 }
                 continue
             }
@@ -250,7 +244,7 @@ final class MarkdownHighlighter {
                 let indent = CGFloat(depth) * 18
                 p.firstLineHeadIndent = indent
                 p.headIndent = indent
-                storage.addAttributes([.foregroundColor: Palette.secondary, .paragraphStyle: p, .mdBlockquote: depth], range: lineRange)
+                storage.addAttributes([.foregroundColor: theme.secondary, .paragraphStyle: p, .mdBlockquote: depth], range: lineRange)
                 syntaxRanges.append((abs(m.range), !activeLine))
                 inlineStart = m.range.length
             }
@@ -281,9 +275,9 @@ final class MarkdownHighlighter {
                     if checked {
                         let rest = NSRange(location: NSMaxRange(m.range), length: lineNS.length - NSMaxRange(m.range))
                         storage.addAttributes([
-                            .foregroundColor: Palette.secondary,
+                            .foregroundColor: theme.secondary,
                             .strikethroughStyle: NSUnderlineStyle.single.rawValue,
-                            .strikethroughColor: Palette.syntax,
+                            .strikethroughColor: theme.syntax,
                         ], range: abs(rest))
                     }
                 }
@@ -299,7 +293,7 @@ final class MarkdownHighlighter {
             if collapse {
                 storage.addAttributes([.font: hiddenFont, .foregroundColor: NSColor.clear], range: r)
             } else {
-                storage.addAttribute(.foregroundColor, value: Palette.syntax, range: r)
+                storage.addAttribute(.foregroundColor, value: theme.syntax, range: r)
             }
         }
     }
@@ -318,7 +312,7 @@ final class MarkdownHighlighter {
 
         for m in inlineCodeRx.matches(in: str, range: scope) {
             let fence = m.range(at: 1).length
-            storage.addAttributes([.font: codeFont, .backgroundColor: Palette.codeBackground, .foregroundColor: Palette.text], range: abs(m.range))
+            storage.addAttributes([.font: codeFont, .backgroundColor: theme.codeBackground, .foregroundColor: theme.text], range: abs(m.range))
             mark(NSRange(location: m.range.location, length: fence))
             mark(NSRange(location: NSMaxRange(m.range) - fence, length: fence))
             protected.append(m.range)
@@ -369,10 +363,10 @@ final class MarkdownHighlighter {
         wrapped(italicStarRx, marker: 1) { addTrait(.italic, storage, $0) }
         wrapped(italicUnderRx, marker: 1) { addTrait(.italic, storage, $0) }
         wrapped(strikeRx, marker: 2) {
-            storage.addAttributes([.strikethroughStyle: NSUnderlineStyle.single.rawValue, .foregroundColor: Palette.secondary], range: $0)
+            storage.addAttributes([.strikethroughStyle: NSUnderlineStyle.single.rawValue, .foregroundColor: theme.secondary], range: $0)
         }
         wrapped(markRx, marker: 2) {
-            storage.addAttribute(.backgroundColor, value: Palette.accentTint(.systemYellow, alpha: 0.35), range: $0)
+            storage.addAttribute(.backgroundColor, value: theme.mark, range: $0)
         }
     }
 

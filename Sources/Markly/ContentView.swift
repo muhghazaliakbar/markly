@@ -9,7 +9,7 @@ struct ContentView: View {
     @AppStorage(Pref.lineSpacing) private var lineSpacing = 1.4
     @AppStorage(Pref.editorWidth) private var editorWidth = 720.0
     @AppStorage(Pref.syntax) private var syntax = SyntaxVisibility.focused
-    @AppStorage(Pref.accent) private var accent = AccentChoice.system
+    @AppStorage(Pref.accent) private var accent = AccentChoice.markly
     @AppStorage(Pref.spellCheck) private var spellCheck = true
     @AppStorage(Pref.showStatusBar) private var showStatusBar = true
     @AppStorage(Pref.imagePreview) private var imagePreview = ImagePreview.medium
@@ -53,13 +53,18 @@ struct ContentView: View {
                 NavigationSplitView(columnVisibility: $columns) {
                     SidebarView(git: git)
                         .navigationSplitViewColumnWidth(min: 200, ideal: 260, max: 420)
-                        .background { BehindWindowBlur().ignoresSafeArea() }
+                        .background {
+                            BehindWindowBlur()
+                                .overlay { if let wash = accent.theme.sidebarWash { LinearGradient(colors: wash, startPoint: .top, endPoint: .bottom) } }
+                                .ignoresSafeArea()
+                        }
                 } detail: {
                     detail
                 }
             }
         }
         .tint(accent.color)
+        .environment(\.accentFill, accent.fill)
         .onAppear {
             panelMounted = showPanel
             panelVisible = showPanel
@@ -118,7 +123,7 @@ struct ContentView: View {
                                        onOpenLink: { workspace.followLink($0) })
                                 .frame(maxHeight: .infinity)
                         } preview: {
-                            LivePreview(live: workspace.live, fileURL: url, accent: accent.nsColor, scrollSync: workspace.scrollSync,
+                            LivePreview(live: workspace.live, fileURL: url, accent: accent.nsColor, warm: accent.theme.warm, scrollSync: workspace.scrollSync,
                                         privacyKey: "\(previewNetwork)\(remoteImages)\(accentCustom)")
                                 .frame(maxHeight: .infinity)
                         }
@@ -170,7 +175,7 @@ struct ContentView: View {
                 withAnimation(GlassStyle.spring) { workspace.showInspector = false }
             }
         }
-        .background(Color(nsColor: .textBackgroundColor))
+        .background(Color(nsColor: accent.theme.paper))
         .environment(\.workspaceClose) { withAnimation(GlassStyle.spring) { workspace.showInspector = false } }
         .navigationTitle(workspace.currentURL?.deletingPathExtension().lastPathComponent ?? "Markly")
         .toolbar { toolbar }
@@ -296,12 +301,13 @@ struct LivePreview: View {
     @ObservedObject var live: LiveDocument
     var fileURL: URL
     var accent: NSColor
+    var warm = false
     var scrollSync: ScrollSync?
     /// Reloads the page when privacy settings (or a custom accent) change.
     var privacyKey: String = ""
 
     var body: some View {
-        PreviewView(markdown: live.text, fileURL: fileURL, accent: accent, reloadKey: privacyKey,
+        PreviewView(markdown: live.text, fileURL: fileURL, accent: accent, warm: warm, reloadKey: privacyKey,
                     animateSwitch: Pref.bool(Pref.animateTransitions, default: true), scrollSync: scrollSync)
     }
 }
@@ -352,7 +358,21 @@ struct EmptyEditor: View {
 
 struct WelcomeView: View {
     @EnvironmentObject var workspace: Workspace
+    @AppStorage(Pref.accent) private var accent = AccentChoice.markly
     @State private var appeared = false
+
+    /// The website's hero: soft coral, rose and peach light on warm paper.
+    private var meshColors: [Color] {
+        guard accent.theme.warm else {
+            return [.indigo.opacity(0.35), .blue.opacity(0.25), .cyan.opacity(0.2),
+                    .purple.opacity(0.2), .clear, .blue.opacity(0.15),
+                    .pink.opacity(0.15), .indigo.opacity(0.2), .teal.opacity(0.2)]
+        }
+        let peach = Color(nsColor: Brand.rgb(0xffa15e)), rose = Color(nsColor: Brand.rose), coral = Color(nsColor: Brand.rgb(0xff6a6a))
+        return [peach.opacity(0.45), peach.opacity(0.2), rose.opacity(0.3),
+                peach.opacity(0.15), .clear, rose.opacity(0.18),
+                coral.opacity(0.12), coral.opacity(0.22), rose.opacity(0.14)]
+    }
 
     var body: some View {
         ZStack {
@@ -360,11 +380,8 @@ struct WelcomeView: View {
                 [0, 0], [0.5, 0], [1, 0],
                 [0, 0.5], [0.6, 0.45], [1, 0.5],
                 [0, 1], [0.5, 1], [1, 1],
-            ], colors: [
-                .indigo.opacity(0.35), .blue.opacity(0.25), .cyan.opacity(0.2),
-                .purple.opacity(0.2), .clear, .blue.opacity(0.15),
-                .pink.opacity(0.15), .indigo.opacity(0.2), .teal.opacity(0.2),
-            ])
+            ], colors: meshColors)
+            .background(Color(nsColor: accent.theme.paper))
             .ignoresSafeArea()
 
             GlassEffectContainer(spacing: 20) {
@@ -375,7 +392,7 @@ struct WelcomeView: View {
                         .scaleEffect(appeared ? 1 : 0.8)
                     VStack(spacing: 6) {
                         Text("Markly").font(.system(size: 40, weight: .regular, design: .serif))
-                        Text("A calm, open-source Markdown editor for your folders.")
+                        Text("A \(Text("calm").font(.system(size: 15, design: .serif).italic()).foregroundStyle(accent.fill)), open-source Markdown editor for your folders.")
                             .foregroundStyle(.secondary)
                     }
                     HStack(spacing: 12) {

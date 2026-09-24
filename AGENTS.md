@@ -48,6 +48,7 @@ Preferences live in the `app.markly.Markly` defaults domain.
 | `GitViews.swift`, `GitService.swift` | Sidebar Git button/card and the `git` CLI wrapper |
 | `ImageStore.swift` | Inline image loading/cache |
 | `Updater.swift` | Sparkle updater (`AppUpdater`), "Check for Updates…" command; feed and public key in `Info.plist` |
+| `Theme.swift` | Brand colours from the website (`Brand`: coral → rose gradient, rose accent) and `Theme` (paper, ink, markers, code, rule, highlight, sidebar wash, preview CSS). The Markly accent (default) uses the warm theme; other accents keep neutral system colours |
 | `Settings.swift` | Preference enums, `Pref` keys (`Pref.all` is used by Reset All Settings), `EditorStyle` |
 
 ## Performance rules
