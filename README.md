@@ -81,7 +81,7 @@ GitHub-style rendering with KaTeX math and syntax highlighting (⌥⌘P), scroll
 
 #### ▤ Folders, not libraries
 
-Add as many folders as you like, browse nested notes and filter by name (⇧⌘L). Changes save to the original file, and files edited elsewhere (git, other editors) reload on their own.
+Add as many folders as you like, browse nested folders as a tree, and search every note by name or text (⇧⌘L) — pick a match to jump straight to it. Changes save to the original file, and files edited elsewhere (git, other editors) reload on their own.
 
 </td>
 </tr>
@@ -116,7 +116,7 @@ Add as many folders as you like, browse nested notes and filter by name (⇧⌘L
 | Preview | <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>P</kbd> | Focus mode | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>F</kbd> |
 | Bigger / smaller text | <kbd>⌘</kbd> <kbd>+</kbd> / <kbd>-</kbd> | Add folder | <kbd>⌘</kbd> <kbd>O</kbd> |
 | Open note 1–9 | <kbd>⌘</kbd> <kbd>1–9</kbd> | Editor settings | <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>I</kbd> |
-| App settings | <kbd>⌘</kbd> <kbd>,</kbd> | Filter notes | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>L</kbd> |
+| App settings | <kbd>⌘</kbd> <kbd>,</kbd> | Search notes | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>L</kbd> |
 
 ## Calm by design.
 
@@ -162,6 +162,7 @@ CI (`.github/workflows/ci.yml`) builds and tests every push and pull request. Pu
 | `MarklyApp.swift` | App entry, menus and keyboard shortcuts |
 | `Workspace.swift` | Sidebar folders, file tree, open/save/autosave, external change reload |
 | `ContentView.swift`, `SidebarView.swift` | Window layout, sidebar, status pill, toolbar |
+| `NoteSearch.swift` | Full-text search across the sidebar's notes |
 | `EditorView.swift` | SwiftUI ↔ `NSTextView` bridge, per-note state, focus dim, typewriter scrolling |
 | `MarkdownTextView.swift` | Editor text view (formatting actions, smart lists, checkboxes, links) and layout manager (block decorations) |
 | `MarkdownHighlighter.swift` | Incremental live Markdown styling and syntax hiding |
@@ -186,7 +187,6 @@ HTML rendering uses [swift-markdown](https://github.com/swiftlang/swift-markdown
 - Pasting and dragging images into a folder next to the note
 - GitHub sign-in and repository creation
 - Outline / table-of-contents panel
-- Full-text search across the folder
 
 ## Contributing
 

@@ -16,6 +16,8 @@ struct EditorView: NSViewRepresentable {
     /// Where the editor reports its reading position for the preview to follow.
     var scrollSync: ScrollSync? = nil
     var onOpenLink: (String) -> Void = { _ in }
+    /// Select and scroll to a range (a search hit) once its note is showing.
+    var reveal: Workspace.Reveal? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -121,6 +123,11 @@ struct EditorView: NSViewRepresentable {
                 textView.setSelectedRange(NSRange(location: min(selection.location, len), length: 0))
                 coordinator.rehighlight()
             }
+        }
+        if let reveal, reveal.id != coordinator.revealID, reveal.url == documentID {
+            coordinator.revealID = reveal.id
+            // After the note switch has laid out, so the target position is final.
+            DispatchQueue.main.async { coordinator.reveal(reveal.range) }
         }
     }
 
@@ -347,6 +354,32 @@ struct EditorView: NSViewRepresentable {
             guard let snapshot else { return }
             container.play(from: snapshot, reduceMotion: reduceMotion)
         }
+        var revealID: UUID?
+
+        /// Selects `range`, centres it in the editor and flashes the find indicator on it.
+        func reveal(_ range: NSRange) {
+            guard let tv = textView, let lm = tv.layoutManager, let tc = tv.textContainer,
+                  let scroll = tv.enclosingScrollView else { return }
+            let length = (tv.string as NSString).length
+            let location = min(range.location, length)
+            let target = NSRange(location: location, length: min(range.length, length - location))
+            tv.setSelectedRange(target)
+            toolbar?.hide()  // a found match isn't a selection to format
+            // With non-contiguous layout, positions far down are estimates until laid out; scrolling to the
+            // range first makes the text view lay out up to it, so the rect below is exact.
+            tv.scrollRangeToVisible(target)
+            let glyphs = lm.glyphRange(forCharacterRange: target, actualCharacterRange: nil)
+            let rect = lm.boundingRect(forGlyphRange: glyphs, in: tc).offsetBy(dx: 0, dy: tv.textContainerOrigin.y)
+            let visible = scroll.contentView.bounds
+            let minY = -scroll.contentInsets.top
+            let maxY = max(minY, tv.frame.height - visible.height)
+            let y = min(max(rect.midY - visible.height / 2, minY), maxY)
+            scroll.contentView.scroll(to: NSPoint(x: visible.origin.x, y: y))
+            scroll.reflectScrolledClipView(scroll.contentView)
+            tv.window?.makeFirstResponder(tv)
+            tv.showFindIndicator(for: target)
+        }
+
         /// Lines touched by the edit in progress, and whether it added or removed fence markers.
         private var editedRange: NSRange?
         private var editTouchesBlocks = false

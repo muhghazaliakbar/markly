@@ -376,7 +376,7 @@ private struct ShortcutsSettings: View {
         ("Blocks", "text.justify.left", [("Heading 1–4", "⌥⌘1–4"), ("Body text", "⌥⌘0"), ("Bulleted list", "⇧⌘8"),
                                         ("Numbered list", "⇧⌘7"), ("Task list", "⇧⌘T"), ("Quote", "⌘'"), ("Indent / outdent", "⇥ / ⇧⇥")]),
         ("Navigation", "arrow.triangle.turn.up.right.diamond", [("Open note 1–9", "⌘1–9"), ("Add folder", "⌘O"), ("New note", "⌘N"),
-                                                                ("Find", "⌘F"), ("Filter notes", "⇧⌘L"), ("Preview", "⌥⌘P"),
+                                                                ("Find", "⌘F"), ("Search notes", "⇧⌘L"), ("Preview", "⌥⌘P"),
                                                                 ("Focus mode", "⇧⌘F"), ("Text size", "⌘+ / ⌘−")]),
         ("Windows", "macwindow", [("Editor settings", "⌥⌘I"), ("App settings", "⌘,")]),
     ]

@@ -120,7 +120,8 @@ struct ContentView: View {
                                        documentID: url, animateSwitch: animateTransitions,
                                        overlayTrailingInset: showPanel ? 312 : 0,
                                        scrollSync: workspace.scrollSync,
-                                       onOpenLink: { workspace.followLink($0) })
+                                       onOpenLink: { workspace.followLink($0) },
+                                       reveal: workspace.reveal)
                                 .frame(maxHeight: .infinity)
                         } preview: {
                             LivePreview(live: workspace.live, fileURL: url, accent: accent.nsColor, warm: accent.theme.warm, scrollSync: workspace.scrollSync,
