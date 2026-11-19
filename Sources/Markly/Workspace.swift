@@ -80,6 +80,13 @@ final class Workspace: ObservableObject {
         didSet { if selection != oldValue, let s = selection { open(s) } }
     }
     @Published private(set) var currentURL: URL?
+    /// A request to select and scroll to a range in the open note (from a search hit). `id` makes repeats distinct.
+    struct Reveal: Equatable {
+        let id = UUID()
+        let url: URL
+        let range: NSRange
+    }
+    @Published private(set) var reveal: Reveal?
     /// The open note. Deliberately not `@Published`: keystrokes shouldn't invalidate SwiftUI.
     /// `revision` changes when the text is replaced from outside the editor (load, reload).
     var text: String = "" {
@@ -212,6 +219,13 @@ final class Workspace: ObservableObject {
         let url = url.standardizedFileURL
         if root(containing: url) == nil { addFolder(url.deletingLastPathComponent()) }
         selection = url
+    }
+
+    /// Opens a note and selects `range` in it, scrolled into view.
+    func show(_ range: NSRange, in url: URL) {
+        selection = url
+        guard currentURL == url else { return }
+        reveal = Reveal(url: url, range: range)
     }
 
     private func open(_ url: URL) {

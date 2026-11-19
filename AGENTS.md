@@ -40,6 +40,7 @@ Preferences live in the `app.markly.Markly` defaults domain.
 | `MarkdownRenderer.swift` | Markdown → HTML (swift-markdown), block source-line annotations, page template, CSP, and the preview's JavaScript (`__update`, `__swap`, `__syncLine`, `__sourceAt`) |
 | `PreviewView.swift` | `WKWebView` preview, script message handler, export/print (`Exporter`) |
 | `ScrollSync.swift` | Editor ⇄ preview scroll channel with the leader rule |
+| `NoteSearch.swift` | Full-text search across the sidebar's notes (plain file reads off the main thread, no index); hits open with `Workspace.show(_:in:)` → `EditorView.reveal` |
 | `SelectionToolbar.swift` | Medium-style format bar on selection |
 | `EditorSettingsPanel.swift` | Floating per-writing settings panel (⌥⌘I) |
 | `AppSettingsView.swift` | Settings window (⌘,): General, Editor, Privacy, Shortcuts, About |
